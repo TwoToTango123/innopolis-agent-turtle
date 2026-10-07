@@ -21,7 +21,7 @@ def _disk_offsets(radius_cells: float) -> list[tuple[int, int]]:
             if dx * dx + dy * dy <= radius_cells * radius_cells]
 
 
-def _dilate(mask: np.ndarray, radius_cells: float) -> np.ndarray:
+def dilate(mask: np.ndarray, radius_cells: float) -> np.ndarray:
     h, w = mask.shape
     out = mask.copy()
     ys, xs = np.nonzero(mask)
@@ -40,12 +40,12 @@ class CostMap:
         self.inflation_radius = inflation_radius
         obstacle = grid.occ != FREE if unknown_is_lethal else grid.occ > 0
         res = grid.resolution
-        self.lethal = _dilate(obstacle, inflation_radius / res)
+        self.lethal = dilate(obstacle, inflation_radius / res)
         # Soft margin: cells between inflation_radius and soft_radius cost extra,
         # so paths keep to the middle of corridors when there is room.
         self.base = np.ones(grid.occ.shape, dtype=np.float64)
         if soft_radius > inflation_radius and soft_cost > 1.0:
-            near = _dilate(obstacle, soft_radius / res) & ~self.lethal
+            near = dilate(obstacle, soft_radius / res) & ~self.lethal
             self.base[near] = soft_cost
         self.terrain = np.ones(grid.occ.shape, dtype=np.float64)
 

@@ -1,0 +1,25 @@
+name: easy_seed42
+difficulty: easy
+seed: 42
+base:
+- -2.0
+- -0.5
+samples:
+- id: s1
+  x: -1.38
+  y: -1.42
+- id: s2
+  x: -0.17
+  y: 1.58
+- id: s3
+  x: -0.38
+  y: -0.47
+terrain:
+- id: A
+  shape: circle
+  multiplier: 3.4
+  cx: -1.47
+  cy: 0.28
+  r: 0.41
+hazards: []
+events: []

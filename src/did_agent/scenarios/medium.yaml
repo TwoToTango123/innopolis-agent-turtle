@@ -1,0 +1,43 @@
+name: medium_seed42
+difficulty: medium
+seed: 42
+base:
+- -2.0
+- -0.5
+samples:
+- id: s1
+  x: -1.38
+  y: -1.42
+- id: s2
+  x: -0.17
+  y: 1.58
+- id: s3
+  x: -0.38
+  y: -0.47
+- id: s4
+  x: -1.03
+  y: 1.62
+- id: s5
+  x: -1.47
+  y: 0.28
+terrain:
+- id: A
+  shape: circle
+  multiplier: 2.2
+  cx: 1.88
+  cy: 1.12
+  r: 0.52
+- id: B
+  shape: circle
+  multiplier: 2.5
+  cx: -0.53
+  cy: 2.12
+  r: 0.46
+- id: C
+  shape: circle
+  multiplier: 3.4
+  cx: -0.57
+  cy: -1.53
+  r: 0.5
+hazards: []
+events: []

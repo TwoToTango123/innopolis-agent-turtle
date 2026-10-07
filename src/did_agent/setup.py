@@ -25,6 +25,9 @@ setup(
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [],
+        'console_scripts': [
+            'judge = did_agent.nodes.judge_node:main',
+            'gen_scenario = did_agent.gen_scenario:main',
+        ],
     },
 )

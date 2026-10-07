@@ -1,0 +1,21 @@
+# Judge parameters that TASK.md does not fix. Temporary values, see QUESTIONS.md.
+judge:
+  battery:                    # QUESTIONS.md#3
+    initial: 60.0             # TASK.md: start 60
+    per_meter: 1.0            # per metre on normal floor (x terrain multiplier)
+    per_radian: 0.05          # turning in place
+    idle_per_second: 0.005    # electronics while standing
+  sensor:                     # QUESTIONS.md#7: exp(-d/sigma) + N(0, noise_std)
+    sigma: 0.7
+    noise_std: 0.03
+  score:                      # QUESTIONS.md#4
+    sample: 10.0
+    false_collect: -2.0
+    collision: -3.0
+    hazard_hit: -5.0
+    return_bonus_per_battery: 0.1
+  collect_radius: 0.30        # TASK.md
+  base_radius: 0.30           # QUESTIONS.md#6
+  robot_radius: 0.105         # Burger; collision = map obstacle closer than robot_radius + margin
+  collision_margin: 0.02      # QUESTIONS.md#5
+  hazard_noise_factor: 3.0    # QUESTIONS.md#8: sensor noise multiplier inside a hazard

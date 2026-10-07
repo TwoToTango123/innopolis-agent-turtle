@@ -1,0 +1,81 @@
+name: hard_seed42
+difficulty: hard
+seed: 42
+base:
+- -2.0
+- -0.5
+samples:
+- id: s1
+  x: -1.38
+  y: -1.42
+- id: s2
+  x: -0.17
+  y: 1.58
+- id: s3
+  x: -0.38
+  y: -0.47
+- id: s4
+  x: -1.03
+  y: 1.62
+- id: s5
+  x: -1.47
+  y: 0.28
+- id: s6
+  x: 1.88
+  y: 1.12
+- id: s7
+  x: 0.78
+  y: 2.08
+terrain:
+- id: A
+  shape: circle
+  multiplier: 2.5
+  cx: -0.53
+  cy: 2.12
+  r: 0.36
+- id: B
+  shape: circle
+  multiplier: 2.4
+  cx: 2.03
+  cy: 0.48
+  r: 0.5
+- id: C
+  shape: circle
+  multiplier: 2.4
+  cx: 0.78
+  cy: 0.73
+  r: 0.51
+- id: D
+  shape: circle
+  multiplier: 3.5
+  cx: -2.32
+  cy: 0.38
+  r: 0.5
+hazards:
+- id: H1
+  shape: circle
+  multiplier: 1.0
+  cx: 0.83
+  cy: -2.12
+  r: 0.3
+events:
+- t: 56.5
+  type: terrain_change
+  params:
+    zone: C
+    multiplier: 3.3
+- t: 104.1
+  type: new_hazard
+  params:
+    zone:
+      id: H2
+      shape: circle
+      multiplier: 1.0
+      cx: 0.38
+      cy: 0.38
+      r: 0.35
+- t: 175.2
+  type: sensor_fault
+  params:
+    noise_std: 0.2
+    duration: 60.0
