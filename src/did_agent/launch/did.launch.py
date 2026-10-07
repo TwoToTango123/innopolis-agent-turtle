@@ -11,6 +11,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -33,6 +34,17 @@ def generate_launch_description():
         Node(package='did_agent', executable='judge', name='did_judge', output='screen',
              parameters=[{'use_sim_time': True,
                           'scenario': arg('scenario'),
+                          'seed': arg('seed'),
+                          'log_dir': arg('log_dir')}]),
+
+        DeclareLaunchArgument('agent', default_value='true', description='Start the agent'),
+        DeclareLaunchArgument('planner', default_value='scripted', description='scripted (level 1)'),
+        Node(package='did_agent', executable='agent', name='did_agent', output='screen',
+             condition=IfCondition(arg('agent')),
+             parameters=[{'use_sim_time': True,
+                          'planner': arg('planner'),
+                          # level-1 demo: drive to the scenario's sample coordinates
+                          'targets_from_scenario': arg('scenario'),
                           'seed': arg('seed'),
                           'log_dir': arg('log_dir')}]),
     ])

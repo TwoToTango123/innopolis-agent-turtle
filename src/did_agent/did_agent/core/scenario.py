@@ -112,6 +112,18 @@ class Scenario:
             return cls.from_dict(yaml.safe_load(f))
 
 
+def resolve_scenario(name: str, seed: int, grid: GridMap, scenarios_dir: str) -> Scenario:
+    """`name` is a YAML path, or easy/medium/hard: seed >= 0 -> generate, else the bundled YAML."""
+    import os
+    if name.endswith('.yaml'):
+        return Scenario.load(os.path.expanduser(name))
+    if name not in DIFFICULTY:
+        raise ValueError(f'scenario must be a .yaml path or one of {sorted(DIFFICULTY)}, got {name!r}')
+    if seed >= 0:
+        return generate(name, seed, grid)
+    return Scenario.load(os.path.join(scenarios_dir, f'{name}.yaml'))
+
+
 # ---- generator --------------------------------------------------------------
 
 def reachable_points(grid: GridMap, base=BASE, clearance: float = 0.25) -> list[tuple[float, float]]:

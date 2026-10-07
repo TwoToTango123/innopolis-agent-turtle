@@ -55,6 +55,23 @@ Visualization Manager:
       Color Transformer: FlatColor
       Color: 255; 0; 0
       Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Planned path
+      Enabled: true
+      Topic:
+        Value: /did_agent/path
+        Depth: 1
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Line Style: Billboards
+      Line Width: 0.03
+      Color: 0; 200; 255
+      Alpha: 1
+      Pose Style: Axes
+      Axes Length: 0.1
+      Axes Radius: 0.01
+      Value: true
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true

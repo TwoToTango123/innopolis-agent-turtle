@@ -22,22 +22,11 @@ from std_srvs.srv import Trigger
 from did_agent.core.frames import Pose2D, odom_to_world, yaw_from_quaternion
 from did_agent.core.grid_map import GridMap
 from did_agent.core.judge import Judge, JudgeConfig
-from did_agent.core.scenario import DIFFICULTY, Scenario, generate
+from did_agent.core.scenario import resolve_scenario
 
 
 def _share(*p):
     return os.path.join(get_package_share_directory('did_agent'), *p)
-
-
-def resolve_scenario(name: str, seed: int, grid: GridMap) -> Scenario:
-    """`name` is a YAML path, or easy/medium/hard (seed >= 0: generate, else bundled YAML)."""
-    if name.endswith('.yaml'):
-        return Scenario.load(os.path.expanduser(name))
-    if name not in DIFFICULTY:
-        raise ValueError(f'scenario must be a .yaml path or one of {sorted(DIFFICULTY)}, got {name!r}')
-    if seed >= 0:
-        return generate(name, seed, grid)
-    return Scenario.load(_share('scenarios', f'{name}.yaml'))
 
 
 class JudgeNode(Node):
@@ -53,7 +42,7 @@ class JudgeNode(Node):
         self.log_dir = p('log_dir', '').value
 
         grid = GridMap.from_yaml(map_yaml)
-        self.scenario = resolve_scenario(scenario, seed, grid)
+        self.scenario = resolve_scenario(scenario, seed, grid, _share('scenarios'))
         self.judge = Judge(self.scenario, JudgeConfig.load(config), grid,
                            seed=None if seed < 0 else seed)
         self.t0 = None
