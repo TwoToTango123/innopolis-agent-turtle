@@ -15,6 +15,7 @@ setup(
         ('share/' + package_name + '/config', glob('config/*.yaml')),
         ('share/' + package_name + '/scenarios', glob('scenarios/*.yaml')),
         ('share/' + package_name + '/maps', glob('maps/*')),
+        ('share/' + package_name + '/rviz', glob('rviz/*.rviz')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
