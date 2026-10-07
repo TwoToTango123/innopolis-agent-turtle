@@ -18,7 +18,7 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from nav_msgs.msg import Odometry, Path
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import Float32, String
 from std_srvs.srv import Trigger
 
@@ -27,6 +27,7 @@ from did_agent.core.costmap import CostMap
 from did_agent.core.executor import MissionExecutor
 from did_agent.core.frames import START_X, START_Y, Pose2D, odom_to_world, yaw_from_quaternion
 from did_agent.core.grid_map import GridMap
+from did_agent.core.localization import DeadReckoning
 from did_agent.core.mission import AgentState, ScriptedPlanner, parse_targets
 from did_agent.core.navigator import Navigator
 from did_agent.core.scenario import resolve_scenario
@@ -60,6 +61,11 @@ class AgentNode(Node):
         self._done_logged = False
         self._journal_len = 0
 
+        # heading from the IMU, distance from wheel odometry (see core/localization.py)
+        self.use_imu = p('use_imu_heading', True).value
+        self.dr = DeadReckoning()
+        if self.use_imu:
+            self.create_subscription(Imu, '/imu', self._on_imu, 50)
         self.create_subscription(Odometry, '/odom', self._on_odom, 20)
         self.create_subscription(LaserScan, '/scan', self._on_scan, 5)
         self.create_subscription(Float32, '/did/battery', lambda m: setattr(self, 'battery', m.data), 10)
@@ -95,8 +101,16 @@ class AgentNode(Node):
     # ---- inputs ---------------------------------------------------------------
     def _on_odom(self, msg):
         q = msg.pose.pose.orientation
-        self.pose = odom_to_world(Pose2D(msg.pose.pose.position.x, msg.pose.pose.position.y,
-                                         yaw_from_quaternion(q.x, q.y, q.z, q.w)))
+        x, y, yaw = msg.pose.pose.position.x, msg.pose.pose.position.y, yaw_from_quaternion(q.x, q.y, q.z, q.w)
+        if self.use_imu:
+            self.dr.update_odom(x, y, yaw)
+            self.pose = self.dr.pose()
+        else:
+            self.pose = odom_to_world(Pose2D(x, y, yaw))
+
+    def _on_imu(self, msg):
+        q = msg.orientation
+        self.dr.update_imu(yaw_from_quaternion(q.x, q.y, q.z, q.w))
 
     def _on_scan(self, msg):
         self.front = front_clearance(msg.ranges, msg.angle_min, msg.angle_increment, 0.5, msg.range_min)
