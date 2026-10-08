@@ -10,6 +10,14 @@ import math
 from .frames import START_X, START_Y, START_YAW, Pose2D, wrap_angle
 
 
+def map_to_odom(world: Pose2D, odom: Pose2D) -> Pose2D:
+    """The map->odom correction that places the odometry pose `odom` at the estimated
+    world pose `world` (what AMCL/SLAM publish). T = world * odom^-1."""
+    yaw = wrap_angle(world.yaw - odom.yaw)
+    c, s = math.cos(yaw), math.sin(yaw)
+    return Pose2D(world.x - (c * odom.x - s * odom.y), world.y - (s * odom.x + c * odom.y), yaw)
+
+
 class DeadReckoning:
     def __init__(self, start: Pose2D = Pose2D(START_X, START_Y, START_YAW)):
         self.start = start

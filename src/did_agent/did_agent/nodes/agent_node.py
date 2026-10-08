@@ -14,7 +14,7 @@ import time
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
-from geometry_msgs.msg import PointStamped, PoseStamped, TwistStamped
+from geometry_msgs.msg import PointStamped, PoseStamped, TransformStamped, TwistStamped
 from nav_msgs.msg import Odometry, Path
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
@@ -22,6 +22,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu, LaserScan
 from std_msgs.msg import Float32, String
 from std_srvs.srv import Trigger
+from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import MarkerArray
 
 from did_agent.core.controller import front_clearance
@@ -29,7 +30,7 @@ from did_agent.core.costmap import CostMap
 from did_agent.core.executor import MissionExecutor
 from did_agent.core.frames import START_X, START_Y, Pose2D, odom_to_world, yaw_from_quaternion
 from did_agent.core.grid_map import GridMap
-from did_agent.core.localization import DeadReckoning
+from did_agent.core.localization import DeadReckoning, map_to_odom
 from did_agent.core.mission import AgentState, GoalQueuePlanner, ScriptedPlanner, parse_targets
 from did_agent.core.navigator import Navigator
 from did_agent.core.scenario import resolve_scenario
@@ -67,6 +68,7 @@ class AgentNode(Node):
         # heading from the IMU, distance from wheel odometry (see core/localization.py)
         self.use_imu = p('use_imu_heading', True).value
         self.dr = DeadReckoning()
+        self.tf_broadcaster = TransformBroadcaster(self) if p('publish_map_odom', True).value else None
         if self.use_imu:
             self.create_subscription(Imu, '/imu', self._on_imu, 50)
         self.create_subscription(Odometry, '/odom', self._on_odom, 20)
@@ -172,6 +174,15 @@ class AgentNode(Node):
             self.pose = self.dr.pose()
         else:
             self.pose = odom_to_world(Pose2D(x, y, yaw))
+        if self.tf_broadcaster is not None:
+            # map->odom correction so RViz draws the robot and the scan where the agent believes it is
+            t = map_to_odom(self.pose, Pose2D(x, y, yaw))
+            tf = TransformStamped()
+            tf.header.stamp = msg.header.stamp
+            tf.header.frame_id, tf.child_frame_id = 'map', 'odom'
+            tf.transform.translation.x, tf.transform.translation.y = t.x, t.y
+            tf.transform.rotation.z, tf.transform.rotation.w = math.sin(t.yaw / 2), math.cos(t.yaw / 2)
+            self.tf_broadcaster.sendTransform(tf)
 
     def _on_imu(self, msg):
         q = msg.orientation

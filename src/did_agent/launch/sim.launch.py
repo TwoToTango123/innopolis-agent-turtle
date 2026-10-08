@@ -65,10 +65,13 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(os.path.join(tb3_launch, 'robot_state_publisher.launch.py')),
             launch_arguments={'use_sim_time': 'true'}.items()),
 
-        # world/map frame: odom starts at the spawn point with zero yaw
+        # world/map frame: odom starts at the spawn point with zero yaw.
+        # When the agent runs it publishes a corrected map->odom itself (IMU heading).
+        DeclareLaunchArgument('static_map_odom', default_value='true',
+                              description='Publish a static map->odom (false when the agent publishes it)'),
         Node(package='tf2_ros', executable='static_transform_publisher', name='map_to_odom',
              arguments=['--x', START_X, '--y', START_Y, '--frame-id', 'map', '--child-frame-id', 'odom'],
-             parameters=[sim_time]),
+             parameters=[sim_time], condition=IfCondition(LaunchConfiguration('static_map_odom'))),
         Node(package='nav2_map_server', executable='map_server', name='map_server',
              parameters=[sim_time, {'yaml_filename': os.path.join(pkg, 'maps', 'map.yaml')}]),
         Node(package='nav2_lifecycle_manager', executable='lifecycle_manager', name='lifecycle_manager_map',

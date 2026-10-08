@@ -3,7 +3,21 @@ import math
 import pytest
 
 from did_agent.core.frames import Pose2D
-from did_agent.core.localization import DeadReckoning
+from did_agent.core.frames import odom_to_world
+from did_agent.core.localization import DeadReckoning, map_to_odom
+
+
+def test_map_to_odom_composes_back_to_world_pose():
+    world = Pose2D(0.4, 1.2, 2.0)
+    odom = Pose2D(2.3, 1.9, 2.1)            # drifted odometry
+    t = map_to_odom(world, odom)
+    back = odom_to_world(odom, start=t)     # apply T to the odom pose
+    assert (back.x, back.y, back.yaw) == pytest.approx((world.x, world.y, world.yaw))
+
+
+def test_map_to_odom_without_drift_is_spawn_offset():
+    t = map_to_odom(Pose2D(-1.0, -0.5, 0.0), Pose2D(1.0, 0.0, 0.0))
+    assert (t.x, t.y, t.yaw) == pytest.approx((-2.0, -0.5, 0.0))
 
 
 def _simulate(odom_yaw_drift_per_turn: float):
