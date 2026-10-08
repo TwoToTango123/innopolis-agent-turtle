@@ -76,6 +76,7 @@ class JudgeNode(Node):
         self.create_timer(1.0 / rate, self._tick)
         # demo view of the hidden scenario (samples, zones) - the agent does not subscribe to it
         self.pub_markers = self.create_publisher(MarkerArray, '/did_judge/markers', 1)
+        self.pub_view = self.create_publisher(String, '/did_judge/view', 1)
         self.create_timer(1.0, self._publish_markers)
 
         sc = self.scenario
@@ -130,6 +131,16 @@ class JudgeNode(Node):
             ms.append(mk.sphere('samples', i, s.x, s.y, 0.12, (0.5, 0.5, 0.5, 0.6) if got else (1.0, 0.85, 0.1, 1.0), st))
             ms.append(mk.text('sample_label', i, s.x, s.y, s.id + (' ✓' if got else ''), (1, 1, 1, 1), st, size=0.1))
         self.pub_markers.publish(MarkerArray(markers=ms))
+        # the same "judge view" as JSON for the web control panel (the agent does not use it)
+        self.pub_view.publish(String(data=json.dumps({
+            'scenario': sc.name, 'difficulty': sc.difficulty, 'battery0': j.cfg.battery.initial,
+            'base': list(sc.base), 'base_radius': j.cfg.base_radius,
+            'samples': [{'id': s.id, 'x': s.x, 'y': s.y, 'collected': s.id in j.collected} for s in sc.samples],
+            'terrain': [{'id': z.id, 'cx': z.cx, 'cy': z.cy, 'r': z.r, 'multiplier': z.multiplier} for z in j.terrain if z.shape == 'circle'],
+            'hazards': [{'id': h.id, 'cx': h.cx, 'cy': h.cy, 'r': h.r} for h in j.hazards if h.shape == 'circle'],
+            # the whole run, thinned to <= 600 points
+            'trajectory': j.trajectory[::max(1, len(j.trajectory) // 600 + 1)] + j.trajectory[-1:],
+        }, ensure_ascii=False)))
 
     def _publish_event(self, e: dict):
         self.pub_events.publish(String(data=json.dumps(e)))

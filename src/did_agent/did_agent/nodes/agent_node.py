@@ -20,7 +20,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu, LaserScan
-from std_msgs.msg import Float32, String
+from std_msgs.msg import Empty, Float32, String
 from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import MarkerArray
@@ -48,6 +48,8 @@ class AgentNode(Node):
         super().__init__('did_agent')
         p = self.declare_parameter
         self.base = (START_X, START_Y)
+        self.mode = p('planner', 'scripted').value
+        self._last_scan = None
         grid = GridMap.from_yaml(p('map', _share('maps', 'map.yaml')).value)
         self.cm = CostMap(grid, inflation_radius=p('inflation_radius', 0.2).value)
         self.nav = Navigator(self.cm)
@@ -97,12 +99,16 @@ class AgentNode(Node):
         self.pub_markers = self.create_publisher(MarkerArray, '/did_agent/markers', 1)
         self._publish_map_markers()
         self.create_timer(0.5, self._publish_markers)
+        # web control panel: state as JSON + an operator "stop"
+        self.pub_state = self.create_publisher(String, '/did_agent/state', 5)
+        self.create_subscription(Empty, '/did_agent/cancel', self._on_cancel, 10)
+        self.create_timer(0.2, self._publish_state)
         self.get_logger().info(f'planner: {type(self.mission.planner).__name__}')
 
     # ---- planner factory (levels 2-4 plug in here) --------------------------
     def make_planner(self, grid):
         p = self.declare_parameter
-        kind = p('planner', 'scripted').value
+        kind = self.get_parameter('planner').value
         if kind == 'scripted':
             targets = parse_targets(p('targets', '').value)
             from_sc = p('targets_from_scenario', '').value
@@ -130,18 +136,25 @@ class AgentNode(Node):
                 client = None
             self.get_logger().info(f'LLM planner: model {model}, {len(targets)} candidate targets from {sc.name}')
             return LLMPlanner(client, targets, self.base, self.nav.path_cost,
-                              mission=p('mission', DEFAULT_MISSION).value)
+                              mission=p('mission', '').value or DEFAULT_MISSION)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
             return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value)
         raise ValueError(f'unknown planner {kind!r}')
 
-    # ---- operator goals from RViz ----------------------------------------------
+    # ---- operator goals from RViz / the web panel ---------------------------------
+    def _take_control(self, reason: str) -> None:
+        """Operator takeover: an autonomous mission (llm/scripted) switches to manual mode."""
+        if isinstance(self.mission.planner, GoalQueuePlanner):
+            return
+        old = type(self.mission.planner).__name__
+        self.mission.replace_planner(GoalQueuePlanner(self.base), reason)
+        self.mode = 'manual'
+        self.get_logger().warn(f'operator took control ({reason}): {old} -> manual mode')
+
     def _on_goal_pose(self, msg):
         x, y = msg.pose.position.x, msg.pose.position.y
-        if not hasattr(self.mission.planner, 'set_goal'):
-            self.get_logger().warn(f'goal ({x:.2f}, {y:.2f}) ignored: planner is not in manual mode')
-            return
+        self._take_control('цель оператора')
         if not self.cm.is_free_world(x, y):
             self.get_logger().warn(f'goal ({x:.2f}, {y:.2f}) is inside an obstacle margin; will stop at the nearest free cell')
         self.mission.planner.set_goal(x, y)
@@ -149,11 +162,53 @@ class AgentNode(Node):
 
     def _on_clicked_point(self, msg):
         x, y = msg.point.x, msg.point.y
-        if not hasattr(self.mission.planner, 'add_point'):
-            self.get_logger().warn(f'route point ({x:.2f}, {y:.2f}) ignored: planner is not in manual mode')
-            return
+        self._take_control('точка маршрута оператора')
         self.mission.planner.add_point(x, y)
         self.get_logger().info(f'route point added: ({x:.2f}, {y:.2f})')
+
+    def _on_cancel(self, _msg):
+        """Stop: take control, drop the route and the current trip, stand still."""
+        self._take_control('стоп оператора')
+        self.mission.planner.queue = []
+        self.mission.cancel_current('cancelled by operator')
+        self.get_logger().info('operator: stop, route cleared')
+
+    def _publish_state(self):
+        """Everything the web panel needs, as one JSON message."""
+        planner = self.mission.planner
+        cur = self.mission.current
+        st = {
+            't': round(self._now(), 2),
+            'mode': self.mode,
+            'planner': type(planner).__name__,
+            'executor': self.mission.state,
+            'pose': None if self.pose is None else {'x': round(self.pose.x, 3), 'y': round(self.pose.y, 3), 'yaw': round(self.pose.yaw, 3)},
+            'nav': {'status': self.nav.status, 'goal': self.nav.goal,
+                    'path': [[round(x, 3), round(y, 3)] for x, y in self.nav.path] if self.nav.status == Navigator.ACTIVE else []},
+            'route': [list(p) for p in planner.pending_targets()] if hasattr(planner, 'pending_targets') else
+                     [list(s.target) for s in getattr(planner, 'queue', []) if s.kind == 'goto' and s.target],
+            'current': None if cur is None else {'kind': cur.kind, 'target': cur.target, 'reason': cur.reason[:200]},
+            'thinking': bool(getattr(planner, 'thinking', False)),
+            'drain_per_meter': round(self.mission.drain_per_meter, 3),
+            'front': None if not math.isfinite(self.front) else round(self.front, 2),
+            'scan': self._scan_world(),
+        }
+        self.pub_state.publish(String(data=json.dumps(st, ensure_ascii=False)))
+
+    def _scan_world(self):
+        """Lidar hits in the world frame (every 4th ray) for the web map."""
+        if self.pose is None or self._last_scan is None:
+            return []
+        m = self._last_scan
+        c, s = math.cos(self.pose.yaw), math.sin(self.pose.yaw)
+        pts = []
+        for i in range(0, len(m.ranges), 4):
+            r = m.ranges[i]
+            if math.isfinite(r) and m.range_min < r < m.range_max:
+                a = m.angle_min + i * m.angle_increment
+                lx, ly = r * math.cos(a), r * math.sin(a)
+                pts.append([round(self.pose.x + c * lx - s * ly, 2), round(self.pose.y + s * lx + c * ly, 2)])
+        return pts
 
     # ---- visualisation -----------------------------------------------------------
     def _publish_map_markers(self):
@@ -222,6 +277,7 @@ class AgentNode(Node):
         self.dr.update_imu(yaw_from_quaternion(q.x, q.y, q.z, q.w))
 
     def _on_scan(self, msg):
+        self._last_scan = msg
         self.front = front_clearance(msg.ranges, msg.angle_min, msg.angle_increment, 0.5, msg.range_min)
 
     def _on_event(self, msg):

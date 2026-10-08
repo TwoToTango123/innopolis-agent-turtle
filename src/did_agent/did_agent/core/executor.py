@@ -41,6 +41,7 @@ class MissionExecutor:
         self._last_battery = None
         self._pending_events: list[dict] = []
         self._planner_version = getattr(planner, 'version', None)
+        self._last_s = None
 
     # ---- bookkeeping --------------------------------------------------------
     def _track(self, s: AgentState) -> None:
@@ -84,6 +85,7 @@ class MissionExecutor:
     # ---- main loop ------------------------------------------------------------
     def step(self, s: AgentState, front: float = math.inf) -> Command:
         self._track(s)
+        self._last_s = s
         if self.state == self.DONE:
             return Command()
         if self.state == self.WAITING:
@@ -133,6 +135,21 @@ class MissionExecutor:
         elif self.nav.status == Navigator.FAILED:
             self._finish_subgoal(s, False, self.nav.reason)
         return Command(v, w)
+
+    # ---- operator control ---------------------------------------------------------
+    def cancel_current(self, reason: str = 'cancelled by operator') -> None:
+        """Stop the current trip (the planner decides what comes next)."""
+        if self.current is not None and self.current.kind in ('goto', 'explore', 'return') and self._last_s is not None:
+            self.nav.cancel()
+            self._finish_subgoal(self._last_s, False, reason)
+
+    def replace_planner(self, planner, reason: str = 'operator took control') -> None:
+        """Operator takeover: drop the current trip and plan, continue with another planner."""
+        self.cancel_current(reason)
+        self.planner = planner
+        self._planner_version = getattr(planner, 'version', None)
+        if self.state == self.DONE:
+            self.state = self.RUNNING
 
     def service_result(self, success: bool, message: str, s: AgentState) -> None:
         if self.current is None:      # preempted while the call was in flight

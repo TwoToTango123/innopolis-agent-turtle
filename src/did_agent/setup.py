@@ -16,6 +16,7 @@ setup(
         ('share/' + package_name + '/scenarios', glob('scenarios/*.yaml')),
         ('share/' + package_name + '/maps', glob('maps/*')),
         ('share/' + package_name + '/rviz', glob('rviz/*.rviz')),
+        ('share/' + package_name + '/webui', glob('webui/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -28,6 +29,7 @@ setup(
         'console_scripts': [
             'judge = did_agent.nodes.judge_node:main',
             'agent = did_agent.nodes.agent_node:main',
+            'control_panel = did_agent.webui.server:main',
             'gen_scenario = did_agent.gen_scenario:main',
         ],
     },

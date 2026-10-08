@@ -27,6 +27,7 @@ def generate_launch_description():
         DeclareLaunchArgument('agent', default_value='true', description='Start the agent'),
         DeclareLaunchArgument('planner', default_value='scripted', description='scripted: fixed mission order | llm: LLM chooses targets and order | manual: goals/route from RViz'),
         DeclareLaunchArgument('llm_model', default_value='deepseek-v4.1-flash', description='model on ai.mai.ru (key in .env)'),
+        DeclareLaunchArgument('mission', default_value='', description='mission text for the LLM planner (empty: default)'),
         DeclareLaunchArgument('battery', default_value='0.0', description='> 0: starting battery instead of 60 (tight-budget demo)'),
         DeclareLaunchArgument('gui', default_value='false', description='Gazebo GUI'),
         DeclareLaunchArgument('rviz', default_value='true', description='RViz'),
@@ -53,6 +54,7 @@ def generate_launch_description():
                           # level-1 demo: drive to the scenario's sample coordinates
                           'targets_from_scenario': arg('scenario'),
                           'llm_model': arg('llm_model'),
+                          'mission': arg('mission'),
                           'llm_env_file': os.path.join(os.getcwd(), '.env'),
                           'seed': arg('seed'),
                           'log_dir': arg('log_dir')}]),

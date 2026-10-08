@@ -66,6 +66,23 @@ def test_new_goal_preempts_current_trip(world_map):
     assert math.dist((sim.x, sim.y), (-1.6, 0.55)) < 0.08
 
 
+def test_operator_takes_control_of_an_autonomous_mission(world_map):
+    from did_agent.core.mission import ScriptedPlanner
+    sim = Sim(world_map)
+    sim.ex.planner = ScriptedPlanner([(1.6, 1.6), (1.8, -1.6)])     # an autonomous mission is running
+    sim.ex._planner_version = None
+    sim.run(4)
+    assert sim.ex.current is not None and sim.ex.current.kind == 'goto'
+    operator = GoalQueuePlanner(BASE)
+    sim.ex.replace_planner(operator, 'operator took control')
+    operator.set_goal(-1.6, 0.55)
+    sim.run(30)
+    assert any(j['message'] == 'operator took control' for j in sim.ex.journal)
+    assert math.dist((sim.x, sim.y), (-1.6, 0.55)) < 0.08
+    sim.ex.cancel_current()                                            # nothing to cancel: no crash
+    assert sim.ex.state == MissionExecutor.RUNNING
+
+
 def test_depleted_battery_ends_the_mission(world_map):
     sim = Sim(world_map)
     sim.planner.set_goal(1.6, 1.6)

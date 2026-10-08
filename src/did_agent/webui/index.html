@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DID — пульт робота</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0e151c; --panel: #151f29; --panel2: #1b2834; --line: #263647;
+  --text: #e6edf3; --text2: #a8b5c2; --muted: #7c8b9a;
+  --accent: #2bb59a; --accent-ink: #0b2a24; --amber: #f2a900; --red: #e5626f; --green: #3fbf7f; --cyan: #36c5f0;
+  --map-bg: #0b1117; --map-free: #26323e; --map-margin: #4d2a35; --map-obstacle: #c9d1d9; --map-unknown: #111920;
+  --r: 10px; --gap: 12px;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
+header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+header .sub { color: var(--muted); font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--panel2); border: 1px solid var(--line); color: var(--text2); white-space: nowrap; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.pill.ok .dot { background: var(--green); } .pill.warn .dot { background: var(--amber); } .pill.bad .dot { background: var(--red); }
+.spacer { flex: 1; }
+main { display: grid; grid-template-columns: 300px minmax(380px, 1fr) 380px; gap: var(--gap); padding: var(--gap); align-items: start; }
+@media (max-width: 1250px) { main { grid-template-columns: 300px 1fr; } .col-right { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); } }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; } .col-right { grid-template-columns: 1fr; } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-bottom: var(--gap); }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--text2); margin: 0 0 10px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+label { display: block; color: var(--text2); font-size: 12px; margin: 10px 0 4px; }
+select, input[type=number], input[type=text], textarea { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; }
+textarea { resize: vertical; min-height: 64px; font-size: 13px; }
+select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.row { display: flex; gap: 8px; } .row > * { flex: 1; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: 13px; margin-top: 8px; }
+.check input { accent-color: var(--accent); }
+button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 8px 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--text2); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
+button.danger { color: var(--red); border-color: #5a2a31; }
+.btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; } .btns button { flex: 1; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; flex: 1; background: transparent; color: var(--text2); }
+.seg button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
+.warnbox { background: #2b2412; border: 1px solid #5a4710; color: #f5d27a; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-top: 10px; }
+/* map */
+.mapcard { padding: 10px; }
+.maptools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.layers { display: flex; gap: 10px; flex-wrap: wrap; color: var(--text2); font-size: 12px; }
+.layers label { display: flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; }
+#mapwrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: var(--map-bg); border-radius: 8px; overflow: hidden; }
+#map { width: 100%; height: 100%; display: block; cursor: crosshair; }
+#maptip { position: absolute; pointer-events: none; background: rgba(14,21,28,.92); border: 1px solid var(--line); padding: 4px 8px; border-radius: 6px; font-size: 12px; color: var(--text); display: none; white-space: nowrap; }
+#confirm { position: absolute; background: var(--panel); border: 1px solid var(--amber); border-radius: 8px; padding: 10px; width: 250px; display: none; box-shadow: 0 6px 24px rgba(0,0,0,.5); z-index: 3; }
+#confirm p { margin: 0 0 8px; font-size: 13px; color: var(--text); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--text2); }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+/* stats */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tile { background: var(--panel2); border-radius: 8px; padding: 10px; min-width: 0; }
+.tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .k { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; width: 0; transition: width .3s; }
+#chart { width: 100%; height: 130px; display: block; }
+.charttip { position: absolute; pointer-events: none; background: rgba(14,21,28,.95); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; font-size: 12px; display: none; }
+/* llm */
+.llmstate { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--amber); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0; }
+.chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.chip.base { border-color: #2f6b4b; color: #8fe0b5; }
+.arrow { color: var(--muted); font-size: 11px; }
+.thought { font-style: italic; color: var(--text); line-height: 1.45; background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
+.meta { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.err { color: var(--red); font-size: 12px; }
+.badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--text2); }
+.badge.fb { color: var(--amber); border-color: #5a4710; }
+details summary { cursor: pointer; color: var(--text2); font-size: 12px; margin-top: 6px; }
+/* feeds */
+.feed { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.item { display: grid; grid-template-columns: 54px 18px 1fr; gap: 6px; align-items: start; font-size: 12.5px; padding: 4px 2px; border-bottom: 1px solid #1d2a36; }
+.item .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.item .ic { text-align: center; }
+.good { color: var(--green); } .warn { color: var(--amber); } .bad { color: var(--red); } .info { color: var(--cyan); }
+#log { height: 240px; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, "Courier New", monospace; color: var(--text2); background: var(--map-bg); border-radius: 8px; padding: 8px; white-space: pre-wrap; word-break: break-word; }
+#log .w { color: var(--amber); } #log .e { color: var(--red); } #log .l { color: #cfe8ff; } #log .p { color: var(--accent); }
+.bottom { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+@media (max-width: 1000px) { .bottom { grid-template-columns: 1fr; } }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid #1d2a36; }
+th { color: var(--muted); font-weight: 600; }
+/* modal */
+#modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+#modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); width: min(980px, 100%); max-height: 88vh; overflow: auto; padding: 16px; }
+#modal pre { background: var(--map-bg); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--text2); max-height: 340px; overflow: auto; }
+#modal h3 { font-size: 14px; margin: 14px 0 6px; }
+#toast { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 11; }
+.toast { background: var(--panel); border: 1px solid var(--line); border-left: 0; border-radius: 8px; padding: 9px 12px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.4); max-width: 380px; }
+.toast.bad { border-color: #5a2a31; color: #ffb3bb; } .toast.ok { border-color: #2f6b4b; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>DID Hack · пульт робота</h1>
+    <div class="sub">TurtleBot3 · Gazebo · ROS 2 · команда IKA</div>
+  </div>
+  <span class="pill" id="pSim"><span class="dot"></span><span>симуляция: —</span></span>
+  <span class="pill" id="pMode"><span class="dot"></span><span>режим: —</span></span>
+  <span class="pill" id="pRun"><span class="dot"></span><span>миссия: —</span></span>
+  <div class="spacer"></div>
+  <span class="pill" id="pTime">t = — с</span>
+</header>
+
+<main>
+  <!-- left: launch & control -->
+  <section class="col-left">
+    <div class="card">
+      <h2>Запуск</h2>
+      <label for="fScenario">Сценарий</label>
+      <div class="row">
+        <select id="fScenario"><option value="easy">easy — 3 образца</option><option value="medium" selected>medium — 5 образцов</option><option value="hard">hard — 7 образцов, события</option></select>
+        <input id="fSeed" type="number" placeholder="seed" title="Пусто — готовый сценарий; число — сгенерировать по seed" style="max-width:90px">
+      </div>
+      <label for="fPlanner">Режим планирования</label>
+      <select id="fPlanner">
+        <option value="llm">LLM выбирает цели и порядок</option>
+        <option value="manual">Оператор: цели кликом</option>
+        <option value="scripted">Фиксированный порядок (база)</option>
+      </select>
+      <div id="llmFields">
+        <label for="fModel">Модель LLM</label>
+        <select id="fModel"></select>
+        <label for="fMission">Миссия (текст для модели)</label>
+        <textarea id="fMission"></textarea>
+      </div>
+      <label for="fBattery">Начальный заряд (пусто — 60)</label>
+      <input id="fBattery" type="number" min="1" max="500" step="1" placeholder="60">
+      <label class="check"><input type="checkbox" id="fRviz"> открыть RViz</label>
+      <label class="check"><input type="checkbox" id="fGui"> окно Gazebo (в WSL с артефактами)</label>
+      <div id="keyWarn" class="warnbox" style="display:none">Нет ключа LLM в <code>.env</code> — модель недоступна, агент будет ехать по резервному плану.</div>
+      <div class="btns">
+        <button class="primary" id="bStart">▶ Запустить</button>
+        <button class="danger" id="bStop">■ Остановить</button>
+      </div>
+      <div class="hint" id="startHint">Запуск занимает ~10–15 с: Gazebo, судья, агент.</div>
+    </div>
+
+    <div class="card">
+      <h2>Управление роботом</h2>
+      <div class="seg" id="clickMode">
+        <button data-m="goal" class="on" title="Клик — ехать в точку сейчас">Цель</button>
+        <button data-m="route" title="Клик — добавить точку маршрута">Маршрут</button>
+      </div>
+      <div class="hint">Клик по карте — <b>цель</b> (или точка маршрута в режиме «Маршрут»). <b>Shift+клик</b> — всегда точка маршрута. В автономном режиме клик перехватывает управление у LLM.</div>
+      <div class="btns">
+        <button id="bHome">⌂ Домой и завершить</button>
+        <button id="bCancel">⏸ Стоп робота</button>
+      </div>
+      <div class="hint" id="ctrlHint"></div>
+    </div>
+  </section>
+
+  <!-- center: map -->
+  <section>
+    <div class="card mapcard">
+      <div class="maptools">
+        <h2 style="margin:0">Карта</h2>
+        <div class="spacer"></div>
+        <div class="layers">
+          <label><input type="checkbox" id="lScan" checked> лидар</label>
+          <label><input type="checkbox" id="lJudge" checked> вид судьи</label>
+          <label><input type="checkbox" id="lTrail" checked> след</label>
+          <label><input type="checkbox" id="lMargin" checked> запретная зона</label>
+        </div>
+      </div>
+      <div id="mapwrap">
+        <canvas id="map"></canvas>
+        <div id="maptip"></div>
+        <div id="confirm"><p>Сейчас едет автономная миссия. Перехватить управление и отправить робота сюда?</p>
+          <div class="row"><button class="primary" id="cYes">Перехватить</button><button id="cNo">Отмена</button></div></div>
+      </div>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--cyan)"></i>робот и путь</span>
+        <span><i class="sw" style="background:#ff5c5c"></i>лидар</span>
+        <span><i class="sw" style="background:#ffd23f"></i>образец</span>
+        <span><i class="sw" style="background:rgba(242,169,0,.45)"></i>дорогой грунт</span>
+        <span><i class="sw" style="background:rgba(229,98,111,.5)"></i>опасная зона</span>
+        <span><i class="sw" style="background:rgba(63,191,127,.45)"></i>база</span>
+        <span><i class="sw" style="background:var(--map-margin)"></i>запретная зона 0,2 м</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- right: telemetry & LLM -->
+  <section class="col-right">
+    <div class="card">
+      <h2>Телеметрия</h2>
+      <div class="tiles">
+        <div class="tile"><div class="v" id="sBattery">—</div><div class="k">заряд</div><div class="bar"><i id="sBatteryBar"></i></div></div>
+        <div class="tile"><div class="v" id="sSamples">—</div><div class="k">образцы</div></div>
+        <div class="tile"><div class="v" id="sScore">—</div><div class="k">счёт</div></div>
+        <div class="tile"><div class="v" id="sPen">—</div><div class="k">штрафы</div></div>
+        <div class="tile"><div class="v" id="sDist">—</div><div class="k">путь, м</div></div>
+        <div class="tile"><div class="v" id="sDrain">—</div><div class="k">расход на метр</div></div>
+      </div>
+      <div style="position:relative; margin-top:12px">
+        <div class="meta" style="margin-bottom:4px">Заряд батареи по времени</div>
+        <svg id="chart" role="img" aria-label="График заряда батареи по времени"></svg>
+        <div class="charttip" id="charttip"></div>
+      </div>
+    </div>
+
+    <div class="card" id="llmCard">
+      <h2>LLM-планировщик <span class="badge" id="llmModel"></span></h2>
+      <div class="llmstate" id="llmState"><span class="meta">ещё нет решений</span></div>
+      <div id="llmLast"></div>
+      <details id="llmHist"><summary>история решений</summary><div id="llmHistList" class="meta"></div></details>
+      <div class="btns"><button id="bPrompt">Промпт, ответ и рассуждение модели</button></div>
+    </div>
+
+    <div class="card">
+      <h2>События и подцели</h2>
+      <div class="feed" id="feed"><span class="meta">пока пусто</span></div>
+    </div>
+  </section>
+
+  <div class="bottom">
+    <div class="card">
+      <h2>Лог запуска <span class="spacer"></span><label class="check" style="margin:0"><input type="checkbox" id="logFilter" checked> только агент, судья, LLM</label></h2>
+      <div id="log"></div>
+    </div>
+    <div class="card">
+      <h2>История прогонов</h2>
+      <div style="overflow:auto; max-height:260px"><table id="runs"><thead><tr><th>время</th><th>сценарий</th><th>образцы</th><th>возврат</th><th>заряд</th><th>путь</th><th>штрафы</th><th>счёт</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+</main>
+
+<div id="modal"><div class="box"><div class="row" style="align-items:center"><h2 style="margin:0">Журнал LLM</h2><div class="spacer"></div><button id="mClose" style="flex:0">Закрыть</button></div><div id="mBody"></div></div></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Number(v).toFixed(d).replace('.', ',');
+let S = null, CFG = null, MAP = null, mapImg = null, clickMode = 'goal', pendingClick = null, logNext = 0, lastLlmCount = 0, lastRunState = '';
+
+function toast(msg, kind = 'ok') {
+  const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg;
+  $('toast').appendChild(el); setTimeout(() => el.remove(), kind === 'bad' ? 7000 : 3500);
+}
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+
+// ---------- config & form ----------
+async function loadConfig() {
+  CFG = await api('/api/config');
+  $('fModel').innerHTML = CFG.models.map((m) => `<option>${esc(m)}</option>`).join('');
+  $('fMission').value = CFG.default_mission;
+  updateForm();
+}
+function updateForm() {
+  const llm = $('fPlanner').value === 'llm';
+  $('llmFields').style.display = llm ? '' : 'none';
+  $('keyWarn').style.display = (llm && CFG && !CFG.has_key) ? '' : 'none';
+}
+$('fPlanner').addEventListener('change', updateForm);
+$('bStart').addEventListener('click', async () => {
+  try {
+    $('bStart').disabled = true;
+    await api('/api/start', { scenario: $('fScenario').value, seed: $('fSeed').value, planner: $('fPlanner').value,
+      model: $('fModel').value, mission: $('fMission').value, battery: $('fBattery').value, rviz: $('fRviz').checked, gui: $('fGui').checked });
+    toast('Запуск начат — через 10–15 с появится робот');
+  } catch (e) { toast('Не удалось запустить: ' + e.message, 'bad'); $('bStart').disabled = false; }
+});
+$('bStop').addEventListener('click', async () => {
+  $('bStop').disabled = true; toast('Останавливаю…');
+  try { await api('/api/stop', {}); toast('Остановлено'); } catch (e) { toast(e.message, 'bad'); }
+  $('bStop').disabled = false; loadRuns();
+});
+$('bHome').addEventListener('click', () => command('/api/home', {}, 'Робот едет домой и завершит прогон'));
+$('bCancel').addEventListener('click', () => command('/api/cancel', {}, 'Стоп: маршрут сброшен, управление у оператора'));
+document.querySelectorAll('#clickMode button').forEach((b) => b.addEventListener('click', () => {
+  clickMode = b.dataset.m; document.querySelectorAll('#clickMode button').forEach((x) => x.classList.toggle('on', x === b));
+}));
+async function command(path, body, okMsg) {
+  try { await api(path, body); if (okMsg) toast(okMsg); } catch (e) { toast(e.message, 'bad'); }
+}
+
+// ---------- map ----------
+async function loadMap() {
+  MAP = await api('/api/map');
+  const raw = atob(MAP.data), w = MAP.w, h = MAP.h;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h);
+  const css = getComputedStyle(document.documentElement);
+  const col = [css.getPropertyValue('--map-free'), css.getPropertyValue('--map-margin'), css.getPropertyValue('--map-obstacle'), css.getPropertyValue('--map-unknown')]
+    .map((c) => c.trim().match(/[0-9a-f]{2}/gi).map((x) => parseInt(x, 16)));
+  MAP.cells = new Uint8Array(w * h);
+  for (let iy = 0; iy < h; iy++) for (let ix = 0; ix < w; ix++) {
+    const v = raw.charCodeAt(iy * w + ix); MAP.cells[iy * w + ix] = v;
+    const p = ((h - 1 - iy) * w + ix) * 4, c = col[v];
+    img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0); mapImg = cv;
+  // the same without the margin layer
+  const cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
+  const c2 = cv2.getContext('2d'), img2 = c2.createImageData(w, h); img2.data.set(img.data);
+  for (let i = 0; i < w * h; i++) if (MAP.cells[i] === 1) { const iy = Math.floor(i / w), ix = i % w, p = ((h - 1 - iy) * w + ix) * 4; img2.data.set([...col[0], 255], p); }
+  c2.putImageData(img2, 0, 0); MAP.noMargin = cv2;
+  MAP.wx0 = MAP.x0; MAP.wy0 = MAP.y0; MAP.wx1 = MAP.x0 + w * MAP.resolution; MAP.wy1 = MAP.y0 + h * MAP.resolution;
+}
+const canvas = $('map'), ctx = canvas.getContext('2d');
+let T = { s: 1, ox: 0, oy: 0 };
+function layout() {
+  const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+  if (!MAP) return;
+  const pad = 8 * dpr, ww = MAP.wx1 - MAP.wx0, wh = MAP.wy1 - MAP.wy0;
+  const s = Math.min((canvas.width - 2 * pad) / ww, (canvas.height - 2 * pad) / wh);
+  T = { s, ox: (canvas.width - ww * s) / 2, oy: (canvas.height - wh * s) / 2, dpr };
+}
+const W2C = (x, y) => [T.ox + (x - MAP.wx0) * T.s, T.oy + (MAP.wy1 - y) * T.s];
+const C2W = (px, py) => [MAP.wx0 + (px - T.ox) / T.s, MAP.wy1 - (py - T.oy) / T.s];
+function cellAt(x, y) {
+  if (!MAP) return 3;
+  const ix = Math.floor((x - MAP.x0) / MAP.resolution), iy = Math.floor((y - MAP.y0) / MAP.resolution);
+  if (ix < 0 || iy < 0 || ix >= MAP.w || iy >= MAP.h) return 3;
+  return MAP.cells[iy * MAP.w + ix];
+}
+function circle(x, y, r, fill, stroke, lw = 1.5) {
+  const [cx, cy] = W2C(x, y); ctx.beginPath(); ctx.arc(cx, cy, r * T.s, 0, Math.PI * 2);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw * T.dpr; ctx.stroke(); }
+}
+function label(x, y, text, color = '#e6edf3', size = 12, dy = 0) {
+  const [cx, cy] = W2C(x, y); ctx.font = `600 ${size * T.dpr}px "Segoe UI", system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * T.dpr; ctx.strokeStyle = 'rgba(11,17,23,.85)';
+  ctx.strokeText(text, cx, cy + dy * T.dpr); ctx.fillStyle = color; ctx.fillText(text, cx, cy + dy * T.dpr);
+}
+function polyline(pts, color, lw, dash) {
+  if (!pts || pts.length < 2) return;
+  ctx.beginPath(); pts.forEach((p, i) => { const [cx, cy] = W2C(p[0], p[1]); i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy); });
+  ctx.strokeStyle = color; ctx.lineWidth = lw * T.dpr; ctx.setLineDash(dash ? dash.map((d) => d * T.dpr) : []); ctx.lineJoin = 'round'; ctx.stroke(); ctx.setLineDash([]);
+}
+function drawMap() {
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--map-bg'); ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!MAP) return;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage($('lMargin').checked ? mapImg : MAP.noMargin, T.ox, T.oy, MAP.w * MAP.resolution * T.s, MAP.h * MAP.resolution * T.s);
+  const v = (S && S.view) || {}, a = (S && S.agent) || {};
+  if ($('lJudge').checked && v.base) {
+    (v.terrain || []).forEach((z) => { circle(z.cx, z.cy, z.r, 'rgba(242,169,0,.22)', 'rgba(242,169,0,.7)'); label(z.cx, z.cy, `${z.id} ×${String(z.multiplier).replace('.', ',')}`, '#ffd27a', 12); });
+    (v.hazards || []).forEach((h) => { circle(h.cx, h.cy, h.r, 'rgba(229,98,111,.28)', 'rgba(229,98,111,.85)'); label(h.cx, h.cy, h.id, '#ffb3bb', 12); });
+  }
+  if (v.base) { circle(v.base[0], v.base[1], v.base_radius || 0.3, 'rgba(63,191,127,.22)', 'rgba(63,191,127,.8)'); label(v.base[0], v.base[1] - 0.42, 'база', '#8fe0b5', 11); }
+  if ($('lTrail').checked && v.trajectory) polyline(v.trajectory.map((p) => [p[1], p[2]]), 'rgba(242,169,0,.75)', 1.6);
+  if (a.nav && a.nav.path && a.nav.path.length) polyline(a.nav.path, '#36c5f0', 2.5);
+  // route: active goal + pending points
+  const route = []; if (a.nav && a.nav.status === 'active' && a.nav.goal) route.push(a.nav.goal);
+  (a.route || []).forEach((p) => { if (!route.length || Math.hypot(p[0] - route[route.length - 1][0], p[1] - route[route.length - 1][1]) > 1e-3) route.push(p); });
+  if (route.length > 1) polyline(route, 'rgba(54,197,240,.55)', 1.5, [6, 5]);
+  route.forEach((p, i) => { circle(p[0], p[1], 0.075, 'rgba(54,197,240,.9)', '#0b1117', 2); label(p[0], p[1], String(i + 1), '#0b1117', 11); });
+  if ($('lJudge').checked) (v.samples || []).forEach((s) => {
+    circle(s.x, s.y, 0.06, s.collected ? '#6b7785' : '#ffd23f', '#0b1117', 2);
+    label(s.x, s.y, s.id + (s.collected ? ' ✓' : ''), s.collected ? '#a8b5c2' : '#fff2b8', 11, -14);
+  });
+  if ($('lScan').checked && a.scan) { ctx.fillStyle = '#ff5c5c'; a.scan.forEach((p) => { const [cx, cy] = W2C(p[0], p[1]); ctx.fillRect(cx - 1.5 * T.dpr, cy - 1.5 * T.dpr, 3 * T.dpr, 3 * T.dpr); }); }
+  if (a.pose) {
+    const [cx, cy] = W2C(a.pose.x, a.pose.y), r = 0.105 * T.s, yaw = -a.pose.yaw;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(yaw);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(54,197,240,.25)'; ctx.fill(); ctx.strokeStyle = '#36c5f0'; ctx.lineWidth = 2 * T.dpr; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r * 1.45, 0); ctx.lineTo(-r * 0.4, r * 0.65); ctx.lineTo(-r * 0.4, -r * 0.65); ctx.closePath(); ctx.fillStyle = '#36c5f0'; ctx.fill();
+    ctx.restore();
+  }
+  if (!S || !S.sim || !S.sim.running) { label((MAP.wx0 + MAP.wx1) / 2, MAP.wy1 - 0.25, 'симуляция не запущена — нажмите «Запустить»', '#a8b5c2', 13); }
+}
+canvas.addEventListener('mousemove', (e) => {
+  if (!MAP) return; const r = canvas.getBoundingClientRect(), dpr = T.dpr || 1;
+  const [x, y] = C2W((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr), c = cellAt(x, y);
+  const tip = $('maptip'); tip.style.display = 'block'; tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 12) + 'px';
+  tip.innerHTML = `x ${fmt(x, 2)} · y ${fmt(y, 2)} — ${['свободно', 'запретная зона: робот встанет рядом', 'препятствие', 'вне арены'][c]}`;
+});
+canvas.addEventListener('mouseleave', () => { $('maptip').style.display = 'none'; });
+canvas.addEventListener('click', (e) => {
+  if (!MAP) return; const r = canvas.getBoundingClientRect(), dpr = T.dpr || 1;
+  const [x, y] = C2W((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr);
+  if (cellAt(x, y) === 3) { toast('Точка вне арены', 'bad'); return; }
+  if (!S || !S.live) { toast('Симуляция ещё не работает — сначала «Запустить»', 'bad'); return; }
+  const route = e.shiftKey || clickMode === 'route', a = S.agent || {};
+  const send = () => command(route ? '/api/point' : '/api/goal', { x, y }, route ? `Точка маршрута (${fmt(x, 2)}; ${fmt(y, 2)})` : `Цель (${fmt(x, 2)}; ${fmt(y, 2)})`);
+  if (a.mode && a.mode !== 'manual' && a.executor !== 'done') {
+    pendingClick = send; const box = $('confirm');
+    box.style.left = Math.min(e.clientX - r.left, r.width - 260) + 'px'; box.style.top = Math.min(e.clientY - r.top + 10, r.height - 110) + 'px'; box.style.display = 'block';
+  } else send();
+});
+$('cYes').addEventListener('click', () => { $('confirm').style.display = 'none'; if (pendingClick) pendingClick(); pendingClick = null; });
+$('cNo').addEventListener('click', () => { $('confirm').style.display = 'none'; pendingClick = null; });
+['lScan', 'lJudge', 'lTrail', 'lMargin'].forEach((id) => $(id).addEventListener('change', drawMap));
+
+// ---------- battery chart (single series: title names it, no legend; hover crosshair) ----------
+function drawChart() {
+  const svg = $('chart'), w = svg.clientWidth || 340, h = svg.clientHeight || 130;
+  const hist = (S && S.battery_hist) || [], b0 = (S && S.view && S.view.battery0) || 60;
+  const L = 34, R = 8, Tp = 6, B = 20, tmax = Math.max(30, hist.length ? hist[hist.length - 1][0] : 30);
+  const X = (t) => L + (t / tmax) * (w - L - R), Y = (b) => Tp + (1 - b / b0) * (h - Tp - B);
+  let g = '';
+  [0, 0.5, 1].forEach((f) => { const yv = b0 * f, y = Y(yv); g += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#263647" stroke-width="1"/><text x="${L - 6}" y="${y + 4}" fill="#7c8b9a" font-size="10" text-anchor="end">${fmt(yv, 0)}</text>`; });
+  [0, 0.5, 1].forEach((f) => { const t = tmax * f; g += `<text x="${X(t)}" y="${h - 5}" fill="#7c8b9a" font-size="10" text-anchor="middle">${fmt(t, 0)} с</text>`; });
+  if (hist.length > 1) g += `<polyline fill="none" stroke="#2bb59a" stroke-width="2" stroke-linejoin="round" points="${hist.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
+  g += `<line id="cx" x1="0" x2="0" y1="${Tp}" y2="${h - B}" stroke="#a8b5c2" stroke-width="1" visibility="hidden"/><circle id="cd" r="4" fill="#2bb59a" stroke="#151f29" stroke-width="2" visibility="hidden"/>`;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.innerHTML = g;
+  svg.onmousemove = (e) => {
+    if (hist.length < 2) return; const r = svg.getBoundingClientRect(), t = ((e.clientX - r.left - L) / (w - L - R)) * tmax;
+    let best = hist[0]; for (const p of hist) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
+    const cx = X(best[0]), cy = Y(best[1]); const ln = svg.querySelector('#cx'), d = svg.querySelector('#cd');
+    ln.setAttribute('x1', cx); ln.setAttribute('x2', cx); ln.setAttribute('visibility', 'visible'); d.setAttribute('cx', cx); d.setAttribute('cy', cy); d.setAttribute('visibility', 'visible');
+    const tip = $('charttip'); tip.style.display = 'block'; tip.style.left = Math.min(cx + 10, w - 120) + 'px'; tip.style.top = (cy + 6) + 'px';
+    tip.textContent = `t = ${fmt(best[0], 0)} с · заряд ${fmt(best[1], 2)}`;
+  };
+  svg.onmouseleave = () => { $('charttip').style.display = 'none'; const ln = svg.querySelector('#cx'), d = svg.querySelector('#cd'); if (ln) { ln.setAttribute('visibility', 'hidden'); d.setAttribute('visibility', 'hidden'); } };
+}
+
+// ---------- panels ----------
+function pill(id, cls, text) { const el = $(id); el.className = 'pill ' + cls; el.lastElementChild.textContent = text; }
+const MODE = { llm: 'LLM', manual: 'оператор', scripted: 'фиксированный' };
+function render() {
+  if (!S) return;
+  const sim = S.sim || {}, sc = S.score || {}, a = S.agent || {};
+  // header
+  if (!sim.running) pill('pSim', '', 'симуляция: остановлена');
+  else if (!S.live) pill('pSim', 'warn', 'симуляция: запускается…');
+  else pill('pSim', 'ok', 'симуляция: работает' + (sim.own ? '' : ' (вне панели)'));
+  pill('pMode', a.mode ? 'ok' : '', 'режим: ' + (MODE[a.mode] || '—'));
+  const st = sc.state, runTxt = { running: 'идёт', finished: sc.returned ? 'завершена, возврат засчитан' : 'завершена без возврата', depleted: 'батарея разряжена' }[st] || '—';
+  pill('pRun', st === 'finished' && sc.returned ? 'ok' : st === 'depleted' || (st === 'finished' && !sc.returned) ? 'bad' : st === 'running' ? 'warn' : '', 'миссия: ' + runTxt);
+  $('pTime').textContent = 't = ' + fmt(sc.t, 0) + ' с';
+  $('bStart').disabled = !!sim.running; $('bStop').disabled = false;
+  $('startHint').textContent = sim.running ? (sim.own ? `Запущено: ${sim.params.scenario}, ${MODE[sim.params.planner]}${sim.params.battery ? ', заряд ' + sim.params.battery : ''} · ${sim.uptime} с` : 'Симуляция запущена из терминала — панель видит её данные.') : 'Запуск занимает ~10–15 с: Gazebo, судья, агент.';
+  $('ctrlHint').textContent = a.mode && a.mode !== 'manual' ? 'Сейчас миссией управляет ' + MODE[a.mode] + '. Клик по карте, «Домой» или «Стоп» перехватят управление.' : a.mode === 'manual' ? 'Режим оператора: робот ждёт цели.' : '';
+  // tiles
+  const b0 = (S.view && S.view.battery0) || 60, bat = S.battery ?? sc.battery;
+  $('sBattery').textContent = fmt(bat, 1); $('sBatteryBar').style.width = (bat == null ? 0 : Math.max(0, Math.min(100, bat / b0 * 100))) + '%';
+  $('sBatteryBar').style.background = bat != null && bat / b0 < 0.2 ? 'var(--red)' : 'var(--accent)';
+  $('sSamples').textContent = sc.samples_total != null ? `${sc.collected}/${sc.samples_total}` : '—';
+  $('sScore').textContent = fmt(sc.score, 1);
+  const pen = sc.penalties ? Object.values(sc.penalties).reduce((x, y) => x + y, 0) : null;
+  $('sPen').textContent = pen == null ? '—' : pen; $('sPen').className = 'v' + (pen ? ' bad' : '');
+  $('sDist').textContent = fmt(sc.distance, 1); $('sDrain').textContent = fmt(a.drain_per_meter, 2);
+  drawChart(); renderLLM(); renderFeed(); drawMap();
+  if (st && st !== lastRunState && st !== 'running') loadRuns();
+  lastRunState = st || '';
+}
+function planChips(plan) {
+  const order = (plan || []).filter((s) => s.startsWith('goto ')).map((s) => s.split(' ')[1]);
+  return '<div class="chips">' + order.map((id) => `<span class="chip">${esc(id)}</span><span class="arrow">→</span>`).join('') + '<span class="chip base">база</span></div>';
+}
+function renderLLM() {
+  const recs = S.llm || [], a = S.agent || {};
+  $('llmCard').style.display = (a.planner === 'LLMPlanner' || recs.length || (S.sim && S.sim.params && S.sim.params.planner === 'llm')) ? '' : 'none';
+  $('llmModel').textContent = (recs.length && recs[recs.length - 1].model) || (S.sim && S.sim.params && S.sim.params.model) || '';
+  if (a.thinking) $('llmState').innerHTML = '<span class="spin"></span><span>модель думает… робот ждёт на месте</span>';
+  else if (recs.length) { const r = recs[recs.length - 1]; $('llmState').innerHTML = r.fallback ? '<span class="badge fb">резервный план</span><span class="meta">модель не дала корректный ответ</span>' : '<span class="badge">план принят</span>'; }
+  else $('llmState').innerHTML = '<span class="meta">ещё нет решений</span>';
+  if (!recs.length) { $('llmLast').innerHTML = ''; $('llmHistList').innerHTML = ''; return; }
+  const r = recs[recs.length - 1], lat = r.attempts.reduce((x, t) => x + (t.latency || 0), 0), errs = r.attempts.filter((t) => t.error);
+  $('llmLast').innerHTML = `<div class="meta">t = ${fmt(r.t, 0)} с · причина: <b style="color:var(--text)">${esc(r.trigger)}</b></div>${planChips(r.plan)}
+    <div class="thought">«${esc(r.thought || '—')}»</div>
+    <div class="meta">попыток ${r.attempts.length} · ${fmt(lat, 1)} с · прогноз расхода ${fmt(r.predicted_battery, 2)}${r.options && r.options.length ? ' · вариантов от алгоритма: ' + r.options.length : ''}</div>
+    ${errs.map((t) => `<div class="err">отклонено: ${esc(t.error)}</div>`).join('')}`;
+  $('llmHistList').innerHTML = recs.slice(0, -1).reverse().map((h) => `<div style="margin-top:6px">t=${fmt(h.t, 0)} с · ${esc(h.trigger)}${h.fallback ? ' · <span class="warn">резерв</span>' : ''}<br>${esc((h.plan || []).filter((s) => s.startsWith('goto')).map((s) => s.split(' ')[1]).concat('база').join(' → '))}</div>`).join('') || 'только одно решение';
+  if (recs.length !== lastLlmCount) { lastLlmCount = recs.length; }
+}
+const EV = { sample_collected: ['✓', 'good', 'образец собран'], collision: ['✕', 'bad', 'столкновение'], false_collect: ['!', 'warn', 'ложный сбор'], hazard_hit: ['⚠', 'bad', 'опасная зона'] };
+const KIND = { goto: 'поездка', collect: 'сбор', return: 'возврат', finish: 'финиш', explore: 'разведка' };
+function renderFeed() {
+  const items = [];
+  (S.events || []).forEach((e) => { const d = EV[e.type] || ['•', 'info', e.type]; items.push({ t: e.t, ic: d[0], cls: d[1], text: `${d[2]}${e.sample ? ' ' + e.sample : ''}${e.zone ? ' ' + e.zone : ''}${e.penalty ? ' (' + e.penalty + ')' : ''}` }); });
+  (S.journal || []).forEach((j) => {
+    const tgt = j.target ? ` (${fmt(j.target[0], 2)}; ${fmt(j.target[1], 2)})` : '';
+    const extra = j.distance > 0.05 ? ` · ${fmt(j.distance, 2)} м, −${fmt(j.battery_used, 2)} заряда` : '';
+    items.push({ t: j.t, ic: j.success ? '→' : '✕', cls: j.success ? 'info' : 'warn', text: `${KIND[j.kind] || j.kind}${tgt}: ${j.message}${extra}`, title: j.reason });
+  });
+  items.sort((x, y) => y.t - x.t);
+  $('feed').innerHTML = items.length ? items.slice(0, 60).map((i) => `<div class="item" title="${esc(i.title || '')}"><span class="t">${fmt(i.t, 1)} с</span><span class="ic ${i.cls}">${i.ic}</span><span>${esc(i.text)}</span></div>`).join('') : '<span class="meta">пока пусто</span>';
+}
+
+// ---------- log & runs ----------
+const LOGKEEP = /did_agent|did_judge|LLM|панель|ERROR|Error|died|Traceback|already running/;
+async function pollLog() {
+  try {
+    const r = await api('/api/log?since=' + logNext); logNext = r.next;
+    if (r.lines.length) {
+      const el = $('log'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+      const html = r.lines.filter((l) => !$('logFilter').checked || LOGKEEP.test(l)).map((l) => {
+        const cls = /ERROR|Error|died|Traceback|REJECTED|rejected/.test(l) ? 'e' : /WARN|warn/.test(l) ? 'w' : /LLM \[/.test(l) ? 'l' : /панель/.test(l) ? 'p' : '';
+        return `<div class="${cls}">${esc(l.replace(/^\[(agent|judge)-\d+\] /, '[$1] ').replace(/\[INFO\] |\[WARN\] /, ''))}</div>`;
+      }).join('');
+      el.insertAdjacentHTML('beforeend', html);
+      while (el.childElementCount > 1200) el.firstElementChild.remove();
+      if (atBottom) el.scrollTop = el.scrollHeight;
+    }
+  } catch (e) { /* server restarting */ }
+}
+async function loadRuns() {
+  try {
+    const runs = await api('/api/runs');
+    $('runs').querySelector('tbody').innerHTML = runs.map((r) => {
+      const pen = r.penalties ? Object.values(r.penalties).reduce((x, y) => x + y, 0) : 0;
+      const t = r.time ? `${r.time.slice(6, 8)}.${r.time.slice(4, 6)} ${r.time.slice(9, 11)}:${r.time.slice(11, 13)}` : '';
+      return `<tr><td>${t}</td><td>${esc(r.scenario)}</td><td>${r.collected}/${r.total}</td><td class="${r.returned ? 'good' : 'bad'}">${r.returned ? 'да' : 'нет'}</td><td>${fmt(r.battery, 1)}</td><td>${fmt(r.distance, 1)}</td><td class="${pen ? 'bad' : ''}">${pen}</td><td>${fmt(r.score, 2)}</td></tr>`;
+    }).join('') || '<tr><td colspan="8" class="meta">прогонов пока нет</td></tr>';
+  } catch (e) { }
+}
+
+// ---------- LLM modal ----------
+$('bPrompt').addEventListener('click', async () => {
+  const recs = await api('/api/llm');
+  $('mBody').innerHTML = recs.length ? recs.slice().reverse().map((r) => `
+    <h3>t = ${fmt(r.t, 0)} с · ${esc(r.trigger)}${r.fallback ? ' · <span class="warn">резервный план</span>' : ''}</h3>
+    <div class="meta">модель ${esc(r.model)} · план: ${esc((r.plan || []).join(' · '))}</div>
+    <div class="thought">«${esc(r.thought || '—')}»</div>
+    ${r.options && r.options.length ? '<div class="meta">варианты от алгоритма: ' + r.options.map((o) => `${o.id}: ${o.order.join('→')}→база (${o.samples} обр., расход ${fmt(o.cost, 2)})`).join('; ') + '</div>' : ''}
+    <details><summary>промпт, отправленный модели</summary><pre>${esc(r.prompt || '')}</pre></details>
+    ${(r.attempts || []).map((a, i) => `<details><summary>попытка ${i + 1}: ${fmt(a.latency, 1)} с, ${a.tokens ?? '—'} токенов${a.error ? ' — <span class="err">' + esc(a.error) + '</span>' : ''}</summary>
+      <div class="meta">ответ модели:</div><pre>${esc(a.content || '')}</pre><div class="meta">рассуждение модели (черновик):</div><pre>${esc(a.reasoning || '')}</pre></details>`).join('')}`).join('<hr style="border-color:#263647">') : '<p class="meta">Решений LLM пока нет — запустите режим «LLM».</p>';
+  $('modal').style.display = 'flex';
+});
+$('mClose').addEventListener('click', () => { $('modal').style.display = 'none'; });
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').style.display = 'none'; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('modal').style.display = 'none'; $('confirm').style.display = 'none'; } });
+
+// ---------- stream ----------
+function connect() {
+  const es = new EventSource('/api/stream');
+  es.onmessage = (m) => { S = JSON.parse(m.data); requestAnimationFrame(render); };
+  es.onerror = () => { pill('pSim', 'bad', 'нет связи с сервером панели'); };
+}
+window.addEventListener('resize', () => { layout(); drawMap(); drawChart(); });
+(async () => {
+  try { await loadConfig(); await loadMap(); } catch (e) { toast('Сервер панели недоступен: ' + e.message, 'bad'); }
+  layout(); drawMap(); drawChart(); connect(); loadRuns();
+  setInterval(pollLog, 1000); setInterval(loadRuns, 15000);
+})();
+</script>
+</body>
+</html>
