@@ -7,6 +7,7 @@ Calls:   /did/collect, /did/finish
 
 Planners are chosen with the `planner` parameter; levels 2-4 add entries to make_planner().
 """
+import collections
 import json
 import math
 import os
@@ -20,7 +21,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu, LaserScan
-from std_msgs.msg import Empty, Float32, String
+from std_msgs.msg import Bool, Empty, Float32, String
 from std_srvs.srv import Trigger
 from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import MarkerArray
@@ -49,6 +50,7 @@ class AgentNode(Node):
         p = self.declare_parameter
         self.base = (START_X, START_Y)
         self.mode = p('planner', 'scripted').value
+        self.auto_collect = p('auto_collect', True).value   # manual mode: collect when the sample sensor is high
         self._last_scan = None
         grid = GridMap.from_yaml(p('map', _share('maps', 'map.yaml')).value)
         self.cm = CostMap(grid, inflation_radius=p('inflation_radius', 0.2).value)
@@ -78,7 +80,8 @@ class AgentNode(Node):
         self.create_subscription(Odometry, '/odom', self._on_odom, 20)
         self.create_subscription(LaserScan, '/scan', self._on_scan, 5)
         self.create_subscription(Float32, '/did/battery', lambda m: setattr(self, 'battery', m.data), 10)
-        self.create_subscription(Float32, '/did/sample_sensor', lambda m: setattr(self, 'sensor', m.data), 10)
+        self._sensor_hist = collections.deque(maxlen=8)        # ~0.8 s at 10 Hz: smooths the sensor noise
+        self.create_subscription(Float32, '/did/sample_sensor', self._on_sensor, 10)
         self.create_subscription(String, '/did/score', lambda m: setattr(self, 'score', json.loads(m.data)), 10)
         self.create_subscription(String, '/did/events', self._on_event,
                                  QoSProfile(depth=50, reliability=ReliabilityPolicy.RELIABLE))
@@ -102,6 +105,8 @@ class AgentNode(Node):
         # web control panel: state as JSON + an operator "stop"
         self.pub_state = self.create_publisher(String, '/did_agent/state', 5)
         self.create_subscription(Empty, '/did_agent/cancel', self._on_cancel, 10)
+        self.create_subscription(Empty, '/did_agent/collect_now', self._on_collect_now, 10)
+        self.create_subscription(Bool, '/did_agent/auto_collect', self._on_auto_collect, 10)
         self.create_timer(0.2, self._publish_state)
         self.get_logger().info(f'planner: {type(self.mission.planner).__name__}')
 
@@ -139,7 +144,8 @@ class AgentNode(Node):
                               mission=p('mission', '').value or DEFAULT_MISSION)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
-            return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value)
+            return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value,
+                                    auto_collect=self.auto_collect)
         raise ValueError(f'unknown planner {kind!r}')
 
     # ---- operator goals from RViz / the web panel ---------------------------------
@@ -148,7 +154,7 @@ class AgentNode(Node):
         if isinstance(self.mission.planner, GoalQueuePlanner):
             return
         old = type(self.mission.planner).__name__
-        self.mission.replace_planner(GoalQueuePlanner(self.base), reason)
+        self.mission.replace_planner(GoalQueuePlanner(self.base, auto_collect=self.auto_collect), reason)
         self.mode = 'manual'
         self.get_logger().warn(f'operator took control ({reason}): {old} -> manual mode')
 
@@ -165,6 +171,17 @@ class AgentNode(Node):
         self._take_control('точка маршрута оператора')
         self.mission.planner.add_point(x, y)
         self.get_logger().info(f'route point added: ({x:.2f}, {y:.2f})')
+
+    def _on_collect_now(self, _msg):
+        self._take_control('сбор оператора')
+        self.mission.planner.collect_now()
+        self.get_logger().info('operator: collect here')
+
+    def _on_auto_collect(self, msg):
+        self.auto_collect = bool(msg.data)
+        if isinstance(self.mission.planner, GoalQueuePlanner):
+            self.mission.planner.auto_collect = self.auto_collect
+        self.get_logger().info(f'auto-collect by sample sensor: {self.auto_collect}')
 
     def _on_cancel(self, _msg):
         """Stop: take control, drop the route and the current trip, stand still."""
@@ -190,6 +207,8 @@ class AgentNode(Node):
             'current': None if cur is None else {'kind': cur.kind, 'target': cur.target, 'reason': cur.reason[:200]},
             'thinking': bool(getattr(planner, 'thinking', False)),
             'drain_per_meter': round(self.mission.drain_per_meter, 3),
+            'sensor': round(self.sensor, 3),
+            'auto_collect': self.auto_collect,
             'front': None if not math.isfinite(self.front) else round(self.front, 2),
             'scan': self._scan_world(),
         }
@@ -271,6 +290,10 @@ class AgentNode(Node):
             tf.transform.translation.x, tf.transform.translation.y = t.x, t.y
             tf.transform.rotation.z, tf.transform.rotation.w = math.sin(t.yaw / 2), math.cos(t.yaw / 2)
             self.tf_broadcaster.sendTransform(tf)
+
+    def _on_sensor(self, msg):
+        self._sensor_hist.append(msg.data)
+        self.sensor = sum(self._sensor_hist) / len(self._sensor_hist)
 
     def _on_imu(self, msg):
         q = msg.orientation

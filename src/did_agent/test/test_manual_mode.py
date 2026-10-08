@@ -7,24 +7,27 @@ from did_agent.core.executor import MissionExecutor
 from did_agent.core.judge import Judge, JudgeConfig
 from did_agent.core.mission import AgentState, GoalQueuePlanner
 from did_agent.core.navigator import Navigator
-from did_agent.core.scenario import Scenario
+from did_agent.core.scenario import Sample, Scenario
 
 CONFIG = os.path.join(os.path.dirname(__file__), '..', 'config', 'judge.yaml')
 BASE = (-2.0, -0.5)
 
 
 class Sim:
-    def __init__(self, world_map):
-        self.judge = Judge(Scenario('t', 'custom', None, BASE, [], []), JudgeConfig.load(CONFIG), world_map)
-        self.planner = GoalQueuePlanner(BASE)
+    def __init__(self, world_map, samples=(), **planner_kw):
+        self.judge = Judge(Scenario('t', 'custom', None, BASE, list(samples), []), JudgeConfig.load(CONFIG), world_map, seed=1)
+        self.planner = GoalQueuePlanner(BASE, **planner_kw)
         self.ex = MissionExecutor(self.planner, Navigator(CostMap(world_map, inflation_radius=0.2)), BASE)
         self.x, self.y, self.yaw, self.t = -2.0, -0.5, 0.0, 0.0
         self.judge.update(0.0, self.x, self.y, self.yaw)
 
     def run(self, seconds, dt=0.05):
         for _ in range(int(seconds / dt)):
-            s = AgentState(self.t, self.x, self.y, self.yaw, self.judge.battery.level, 0.0, BASE)
+            s = AgentState(self.t, self.x, self.y, self.yaw, self.judge.battery.level, self.judge.sensor_reading(), BASE)
             cmd = self.ex.step(s)
+            if cmd.call == 'collect':
+                ok, msg, _ = self.judge.collect()
+                self.ex.service_result(ok, msg, s)
             if cmd.call == 'finish':
                 ok, msg = self.judge.finish()
                 self.ex.service_result(ok, msg, s)
@@ -101,3 +104,32 @@ def test_goal_at_base_returns_and_finishes(world_map):
     sim.run(30)
     assert sim.ex.state == MissionExecutor.DONE
     assert sim.judge.score()['returned']
+
+
+SAMPLE = Sample('s1', 0.55, -0.55)
+
+
+def test_auto_collect_when_sensor_says_near(world_map):
+    sim = Sim(world_map, samples=[SAMPLE])
+    sim.planner.set_goal(0.6, -0.5)                 # click right next to the sample
+    sim.run(40)
+    assert sim.judge.score()['collected'] == 1
+    assert sim.judge.score()['penalties']['false_collect'] == 0
+
+
+def test_no_collect_attempt_far_from_samples(world_map):
+    sim = Sim(world_map, samples=[SAMPLE])
+    sim.planner.set_goal(-0.55, 0.55)               # nothing here
+    sim.run(30)
+    assert not any(j['kind'] == 'collect' for j in sim.ex.journal)
+    assert sim.judge.score()['penalties']['false_collect'] == 0
+
+
+def test_collect_now_and_auto_collect_off(world_map):
+    sim = Sim(world_map, samples=[SAMPLE], auto_collect=False)
+    sim.planner.set_goal(0.6, -0.5)
+    sim.run(40)
+    assert sim.judge.score()['collected'] == 0          # auto-collect is off
+    sim.planner.collect_now()                           # operator presses "collect here"
+    sim.run(2)
+    assert sim.judge.score()['collected'] == 1

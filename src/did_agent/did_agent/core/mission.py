@@ -111,10 +111,14 @@ class GoalQueuePlanner:
     """
     persistent = True
 
-    def __init__(self, base: tuple[float, float], collect_at_goals: bool = False, base_radius: float = 0.3):
+    def __init__(self, base: tuple[float, float], collect_at_goals: bool = False, base_radius: float = 0.3,
+                 auto_collect: bool = True, sensor_threshold: float = 0.6):
         self.base = base
-        self.collect_at_goals = collect_at_goals
+        self.collect_at_goals = collect_at_goals      # always try /did/collect at a goal (risks false_collect)
+        self.auto_collect = auto_collect              # collect at a goal only if the sample sensor says one is near
+        self.sensor_threshold = sensor_threshold      # smoothed /did/sample_sensor level that means "within ~0.3 m"
         self.base_radius = base_radius
+        self._check_sensor = False
         self.queue: list[Subgoal] = []
         self.log: list[str] = []
         self.version = 0          # bumped on set_goal: the executor preempts the current subgoal
@@ -141,13 +145,28 @@ class GoalQueuePlanner:
     def pending_targets(self) -> list[tuple[float, float]]:
         return [s.target if s.kind == 'goto' else self.base for s in self.queue if s.kind in ('goto', 'return')]
 
+    def collect_now(self) -> None:
+        """Operator: try to collect right here (interrupts the current trip, keeps the route)."""
+        self.queue.insert(0, Subgoal('collect', params={'operator': True}, reason='оператор: собрать здесь'))
+        self.version += 1
+        self.log.append('collect now')
+
     def next_subgoal(self, state: AgentState) -> Subgoal | None:
+        if self._check_sensor:
+            self._check_sensor = False
+            if self.auto_collect and not (self.queue and self.queue[0].kind == 'collect'):
+                if state.sensor >= self.sensor_threshold:
+                    self.log.append(f't={state.t:.1f}: sensor {state.sensor:.2f} >= {self.sensor_threshold} -> collect')
+                    return Subgoal('collect', reason=f'датчик образца {state.sensor:.2f}: образец рядом')
+                self.log.append(f't={state.t:.1f}: sensor {state.sensor:.2f} < {self.sensor_threshold}: no sample here')
         return self.queue.pop(0) if self.queue else None
 
     def on_result(self, result: SubgoalResult, state: AgentState) -> None:
         self.log.append(f't={state.t:.1f}: {result.subgoal.kind} -> {"ok" if result.success else "FAIL"} {result.message}')
-        if result.subgoal.kind == 'goto' and not result.success and self.queue and self.queue[0].kind == 'collect':
-            self.queue.pop(0)
+        if result.subgoal.kind == 'goto':
+            if not result.success and self.queue and self.queue[0].kind == 'collect' and not self.queue[0].params.get('operator'):
+                self.queue.pop(0)
+            self._check_sensor = result.success
 
 
 def parse_targets(text: str) -> list[tuple[float, float]]:

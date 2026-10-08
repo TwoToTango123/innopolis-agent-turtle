@@ -27,7 +27,7 @@ from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PointStamped, PoseStamped
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Empty, Float32, String
+from std_msgs.msg import Bool, Empty, Float32, String
 
 from did_agent.core.costmap import CostMap
 from did_agent.core.grid_map import OCCUPIED, GridMap
@@ -60,6 +60,8 @@ class Bridge(Node):
         self.pub_goal = self.create_publisher(PoseStamped, '/goal_pose', 10)
         self.pub_point = self.create_publisher(PointStamped, '/clicked_point', 10)
         self.pub_cancel = self.create_publisher(Empty, '/did_agent/cancel', 10)
+        self.pub_collect = self.create_publisher(Empty, '/did_agent/collect_now', 10)
+        self.pub_auto = self.create_publisher(Bool, '/did_agent/auto_collect', 10)
 
     def reset(self):
         with self.lock:
@@ -135,6 +137,12 @@ class Bridge(Node):
 
     def cancel(self):
         self.pub_cancel.publish(Empty())
+
+    def collect(self):
+        self.pub_collect.publish(Empty())
+
+    def auto_collect(self, on: bool):
+        self.pub_auto.publish(Bool(data=bool(on)))
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -368,6 +376,12 @@ def make_handler(bridge: Bridge, sim: Sim, root: str, static_dir: str, mapdata: 
                 if u.path == '/api/cancel':
                     bridge.cancel()
                     return self._json({'ok': True})
+                if u.path == '/api/collect':
+                    bridge.collect()
+                    return self._json({'ok': True})
+                if u.path == '/api/auto_collect':
+                    bridge.auto_collect(bool(body.get('on')))
+                    return self._json({'ok': True})
             except (ValueError, KeyError, TypeError) as e:
                 return self._json({'ok': False, 'error': str(e)}, 400)
             self._json({'error': 'not found'}, 404)
@@ -386,8 +400,18 @@ def main(argv=None):
     threading.Thread(target=rclpy.spin, args=(bridge,), daemon=True).start()
     sim = Sim(os.path.abspath(args.root))
     handler = make_handler(bridge, sim, sim.root, share('webui'), map_payload())
-    server = ThreadingHTTPServer((args.host, args.port), handler)
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), handler)
+    except OSError as e:
+        print(f'Порт {args.port} занят ({e.strerror}). Пульт уже запущен? Откройте http://localhost:{args.port} '
+              f'или остановите старый: pkill -f did_agent/control_panel; другой порт: ./scripts/control_panel.sh 8090', flush=True)
+        bridge.destroy_node()
+        rclpy.shutdown()
+        raise SystemExit(1)
     server.daemon_threads = True
+    # Ctrl+C and kill (SIGTERM) both stop the server cleanly - and the simulation it started
+    signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
+    signal.signal(signal.SIGINT, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
     print(f'DID control panel: http://localhost:{args.port}  (project root {sim.root})', flush=True)
     try:
         server.serve_forever()
