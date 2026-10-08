@@ -66,6 +66,16 @@ def test_new_goal_preempts_current_trip(world_map):
     assert math.dist((sim.x, sim.y), (-1.6, 0.55)) < 0.08
 
 
+def test_depleted_battery_ends_the_mission(world_map):
+    sim = Sim(world_map)
+    sim.planner.set_goal(1.6, 1.6)
+    sim.run(2)
+    s = AgentState(sim.t, sim.x, sim.y, sim.yaw, 0.0, 0.0, BASE)
+    cmd = sim.ex.step(s)
+    assert sim.ex.state == MissionExecutor.DONE and (cmd.v, cmd.w) == (0.0, 0.0)
+    assert sim.ex.journal[-1]['message'] == 'battery depleted'
+
+
 def test_goal_at_base_returns_and_finishes(world_map):
     sim = Sim(world_map)
     sim.planner.set_goal(-1.6, 0.55)

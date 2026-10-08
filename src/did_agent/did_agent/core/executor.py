@@ -88,6 +88,13 @@ class MissionExecutor:
             return Command()
         if self.state == self.WAITING:
             return Command()
+        if s.battery <= 0.0:
+            # the run is over: the robot cannot move any more, do not keep replanning
+            self.nav.cancel()
+            if self.current is not None:
+                self._finish_subgoal(s, False, 'battery depleted')
+            self.state = self.DONE
+            return Command()
         self.state = self.RUNNING
         # operator planners can replace the plan at any time: preempt the current trip
         version = getattr(self.planner, 'version', None)

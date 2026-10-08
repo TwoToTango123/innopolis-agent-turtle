@@ -24,6 +24,8 @@ source install/setup.bash
 |---|---|
 | **Полная миссия**: 3 образца → сбор → возврат → `/did/finish` | `ros2 launch did_agent did.launch.py scenario:=easy` |
 | Миссия посложнее (5 образцов, 3 зоны грунта) | `ros2 launch did_agent did.launch.py scenario:=medium` |
+| **LLM-планировщик** выбирает цели, порядок и момент возврата | `ros2 launch did_agent did.launch.py scenario:=medium planner:=llm` |
+| LLM при нехватке заряда (видно, как модель выбирает) | `ros2 launch did_agent did.launch.py scenario:=medium planner:=llm battery:=10` |
 | **Оператор задаёт цель / маршрут** в RViz | `ros2 launch did_agent did.launch.py planner:=manual` |
 | Сценарий, сгенерированный по seed | `ros2 launch did_agent did.launch.py scenario:=hard seed:=7` |
 | Остановить всё | `./scripts/stop_sim.sh` |
@@ -33,6 +35,18 @@ source install/setup.bash
 - **Publish Point** — добавить точку в маршрут (робот проходит их по порядку);
 - цель на базе (зелёный круг) — вернуться и завершить прогон;
 - то же из терминала: `./scripts/send_goal.sh 0.55 -0.55`, `./scripts/send_route.sh 0.55,0.55 -0.55,1.6`.
+
+### LLM-планировщик (уровень 2)
+
+Нужен ключ ai.mai.ru. Положите его в `~/innopolis_proj/.env` (файл в `.gitignore`, в репозиторий не попадает):
+```
+MAI_API_KEY=sk-...
+MAI_BASE_URL=https://api-ai.mai.ru/v1
+```
+Модель по умолчанию — `deepseek-v4.1-flash`, другую можно выбрать: `llm_model:=qwen3.8-flash-next`.
+Без ключа агент не падает: в лог пишется ошибка и включается детерминированный резервный план.
+Решения модели (план, мысль по-русски, задержка, отклонённые ответы) видны в терминале и в топике `/did_agent/llm`,
+полный журнал (промпт, ответ, рассуждение модели) — в `runs/*_agent.json`. Без ROS: `python3 -m did_agent.core.offline_sim medium --planner llm --battery 10`.
 
 Флаги: `gui:=true` — окно Gazebo (в WSL на Intel Arc рисуется с артефактами, поэтому по умолчанию выключено), `rviz:=false`.
 Журналы прогонов (счёт, события, траектория, журнал подцелей) пишутся в `runs/`.
@@ -49,7 +63,7 @@ source install/setup.bash
  /odom /imu ─┤ DeadReckoning (путь — одометрия, курс — IMU) → поза в мире, TF map→odom│
  /scan      ─┤                                                                       │
  /did/*     ─┤ Planner ──подцели──► MissionExecutor ──► Navigator ──► /cmd_vel       │
- RViz goals ─┤ scripted | manual    (бюджет батареи)    A* + follower  (TwistStamped) │
+ RViz goals ─┤ scripted|llm|manual (бюджет батареи)    A* + follower  (TwistStamped) │
              └──────────────────────────────┬────────────────────────────────────────┘
                                   /did/collect, /did/finish
              ┌──────────────── did_judge (ROS-узел) ─────────────────────────────────┐
@@ -64,7 +78,7 @@ source install/setup.bash
 ## Тесты и офлайн-симулятор
 
 ```bash
-cd src/did_agent && python3 -m pytest -q          # 104 теста, ~25 с, ROS не нужен
+cd src/did_agent && python3 -m pytest -q          # 118 тестов, ~1 мин, ROS и сеть не нужны
 python3 -m did_agent.core.offline_sim easy        # вся миссия без Gazebo за секунды
 ```
 
