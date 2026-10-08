@@ -94,7 +94,8 @@ class Bridge(Node):
                 self.llm.clear()
             if not self.battery_hist or t - self.battery_hist[-1][0] >= 0.5:
                 self.battery_hist.append([round(t, 1), round(s.get('battery', 0.0), 3)])
-                del self.battery_hist[:-1200]
+                if len(self.battery_hist) > 1200:      # keep the whole run: thin out instead of dropping the start
+                    self.battery_hist = self.battery_hist[::2]
             self.score = s
             self._touch()
 
@@ -397,7 +398,6 @@ def main(argv=None):
     args, ros_args = ap.parse_known_args(argv)
     rclpy.init(args=ros_args)
     bridge = Bridge()
-    threading.Thread(target=rclpy.spin, args=(bridge,), daemon=True).start()
     sim = Sim(os.path.abspath(args.root))
     handler = make_handler(bridge, sim, sim.root, share('webui'), map_payload())
     try:
@@ -409,6 +409,7 @@ def main(argv=None):
         rclpy.shutdown()
         raise SystemExit(1)
     server.daemon_threads = True
+    threading.Thread(target=rclpy.spin, args=(bridge,), daemon=True).start()
     # Ctrl+C and kill (SIGTERM) both stop the server cleanly - and the simulation it started
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())
     signal.signal(signal.SIGINT, lambda *_: threading.Thread(target=server.shutdown, daemon=True).start())

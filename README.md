@@ -23,7 +23,7 @@ source install/setup.bash
 ```bash
 cd ~/innopolis_proj && ./scripts/control_panel.sh
 ```
-Откройте в Windows **http://localhost:8080**. Там всё в одном окне ([скриншот](docs/img/control_panel_llm.png)):
+Откройте в Windows **http://localhost:8080**. Там всё в одном окне ([светлая тема](docs/img/control_panel_light.png), [тёмная](docs/img/control_panel_dark.png)):
 - **запуск/остановка** с выбором сценария, режима (LLM / оператор / фиксированный), заряда, seed, модели LLM и текста миссии;
 - **живая карта**: робот, лидар, путь A*, маршрут, образцы, зоны грунта, база, истинный след; клик — цель, Shift+клик — точка маршрута,
   «Домой и завершить», «Стоп робота»; клик во время LLM-миссии **перехватывает управление**;

@@ -3,271 +3,397 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DID — пульт робота</title>
+<title>Пульт робота · DID</title>
 <style>
+/* ---------- tokens ---------- */
 :root {
+  --font: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+  --radius: 8px; --radius-lg: 12px;
+  --bg: #fafafa; --surface: #ffffff; --surface-2: #f4f4f5; --hover: #f0f0f1; --border: #e4e4e7; --border-strong: #d4d4d8;
+  --text: #18181b; --text-2: #52525b; --muted: #71717a;
+  --accent: #0e7c66; --accent-hover: #0b6654; --accent-fg: #ffffff; --accent-soft: #e3f4ef;
+  --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --info: #2563eb;
+  --ok-soft: #dcfce7; --warn-soft: #fef3c7; --bad-soft: #fee2e2;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.06);
+  --map-bg: #f1f1f3; --map-free: #ffffff; --map-margin: #fbe3e6; --map-obstacle: #3f3f46; --map-unknown: #e4e4e7;
+  --m-path: #0284c7; --m-robot: #0284c7; --m-scan: #ef4444; --m-sample: #eab308; --m-sample-done: #a1a1aa;
+  --m-terrain: 217,119,6; --m-hazard: 220,38,38; --m-base: 22,163,74; --m-trail: 217,119,6; --m-halo: rgba(255,255,255,.9); --m-label: #27272a;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0a0a0b; --surface: #111113; --surface-2: #18181b; --hover: #1f1f23; --border: #27272a; --border-strong: #3f3f46;
+  --text: #ededef; --text-2: #b4b4bb; --muted: #8b8b94;
+  --accent: #2bb59a; --accent-hover: #3cc9ad; --accent-fg: #06201b; --accent-soft: #0f2a24;
+  --ok: #22c55e; --warn: #f59e0b; --bad: #f87171; --info: #60a5fa;
+  --ok-soft: #0f2a1a; --warn-soft: #2a2010; --bad-soft: #2d1416;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  --map-bg: #0c0d0f; --map-free: #1a1d22; --map-margin: #3b1d25; --map-obstacle: #d4d4d8; --map-unknown: #0f1013;
+  --m-path: #38bdf8; --m-robot: #38bdf8; --m-scan: #f87171; --m-sample: #facc15; --m-sample-done: #71717a;
+  --m-terrain: 245,158,11; --m-hazard: 248,113,113; --m-base: 34,197,94; --m-trail: 245,158,11; --m-halo: rgba(12,13,15,.85); --m-label: #e4e4e7;
   color-scheme: dark;
-  --bg: #0e151c; --panel: #151f29; --panel2: #1b2834; --line: #263647;
-  --text: #e6edf3; --text2: #a8b5c2; --muted: #7c8b9a;
-  --accent: #2bb59a; --accent-ink: #0b2a24; --amber: #f2a900; --red: #e5626f; --green: #3fbf7f; --cyan: #36c5f0;
-  --map-bg: #0b1117; --map-free: #26323e; --map-margin: #4d2a35; --map-obstacle: #c9d1d9; --map-unknown: #111920;
-  --r: 10px; --gap: 12px;
-  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px; }
-header { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
-header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .2px; }
-header .sub { color: var(--muted); font-size: 12px; }
-.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--panel2); border: 1px solid var(--line); color: var(--text2); white-space: nowrap; }
-.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-.pill.ok .dot { background: var(--green); } .pill.warn .dot { background: var(--amber); } .pill.bad .dot { background: var(--red); }
-.spacer { flex: 1; }
-main { display: grid; grid-template-columns: 300px minmax(380px, 1fr) 380px; gap: var(--gap); padding: var(--gap); align-items: start; }
-@media (max-width: 1250px) { main { grid-template-columns: 300px 1fr; } .col-right { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); } }
-@media (max-width: 800px) { main { grid-template-columns: 1fr; } .col-right { grid-template-columns: 1fr; } }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-bottom: var(--gap); }
-.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--text2); margin: 0 0 10px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
-label { display: block; color: var(--text2); font-size: 12px; margin: 10px 0 4px; }
-select, input[type=number], input[type=text], textarea { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font: inherit; }
-textarea { resize: vertical; min-height: 64px; font-size: 13px; }
-select:focus, input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.row { display: flex; gap: 8px; } .row > * { flex: 1; }
-.check { display: flex; align-items: center; gap: 8px; color: var(--text2); font-size: 13px; margin-top: 8px; }
-.check input { accent-color: var(--accent); }
-button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); padding: 8px 12px; cursor: pointer; }
-button:hover:not(:disabled) { border-color: var(--text2); }
-button:disabled { opacity: .45; cursor: not-allowed; }
-button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 650; }
-button.danger { color: var(--red); border-color: #5a2a31; }
-.btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; } .btns button { flex: 1; }
-.seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.seg button { border: 0; border-radius: 0; flex: 1; background: transparent; color: var(--text2); }
-.seg button.on { background: var(--panel2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
-.sensor { display: flex; align-items: center; gap: 10px; }
-.sbar { position: relative; flex: 1; height: 10px; background: var(--line); border-radius: 5px; overflow: visible; }
-.sbar > i { display: block; height: 100%; width: 0; border-radius: 5px; background: var(--amber); }
-.sbar > b.thr { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--text2); left: 60%; }
-.sval { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 40px; text-align: right; }
-.hint { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 8px; }
-.warnbox { background: #2b2412; border: 1px solid #5a4710; color: #f5d27a; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-top: 10px; }
-/* map */
-.mapcard { padding: 10px; }
-.maptools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
-.layers { display: flex; gap: 10px; flex-wrap: wrap; color: var(--text2); font-size: 12px; }
-.layers label { display: flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; }
-#mapwrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: var(--map-bg); border-radius: 8px; overflow: hidden; }
-#map { width: 100%; height: 100%; display: block; cursor: crosshair; }
-#maptip { position: absolute; pointer-events: none; background: rgba(14,21,28,.92); border: 1px solid var(--line); padding: 4px 8px; border-radius: 6px; font-size: 12px; color: var(--text); display: none; white-space: nowrap; }
-#confirm { position: absolute; background: var(--panel); border: 1px solid var(--amber); border-radius: 8px; padding: 10px; width: 250px; display: none; box-shadow: 0 6px 24px rgba(0,0,0,.5); z-index: 3; }
-#confirm p { margin: 0 0 8px; font-size: 13px; color: var(--text); }
-.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--text2); }
-.legend span { display: inline-flex; align-items: center; gap: 5px; }
-.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-/* stats */
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.tile { background: var(--panel2); border-radius: 8px; padding: 10px; min-width: 0; }
-.tile .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.tile .k { color: var(--muted); font-size: 11px; margin-top: 2px; }
-.bar { height: 6px; background: var(--line); border-radius: 3px; margin-top: 6px; overflow: hidden; }
-.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; width: 0; transition: width .3s; }
-#chart { width: 100%; height: 130px; display: block; }
-.charttip { position: absolute; pointer-events: none; background: rgba(14,21,28,.95); border: 1px solid var(--line); padding: 3px 8px; border-radius: 6px; font-size: 12px; display: none; }
-/* llm */
-.llmstate { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.spin { width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--amber); border-radius: 50%; animation: spin .8s linear infinite; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13.5px/1.45 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- header ---------- */
+.top { height: 56px; display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 20; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; white-space: nowrap; }
+.logo { width: 26px; height: 26px; border-radius: 7px; background: var(--text); color: var(--bg); display: grid; place-items: center; }
+.logo svg { width: 15px; height: 15px; stroke-width: 2.4; }
+.crumb { color: var(--muted); font-weight: 400; }
+.sep { width: 1px; height: 22px; background: var(--border); }
+.status { display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.dot.warn { background: var(--warn); animation: pulse 1.2s infinite; }
+.dot.bad { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .35; } }
+.grow { flex: 1; }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); color: var(--text-2); background: var(--surface-2); white-space: nowrap; }
+.badge.ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.badge.warn { color: var(--warn); background: var(--warn-soft); border-color: transparent; }
+.badge.bad { color: var(--bad); background: var(--bad-soft); border-color: transparent; }
+
+/* ---------- buttons & inputs ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap; transition: background .12s, border-color .12s; }
+.btn:hover:not(:disabled) { background: var(--hover); border-color: var(--border-strong); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { opacity: .88; background: var(--text); }
+.btn.accent { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 600; }
+.btn.accent:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.danger { color: var(--bad); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.btn.icon { width: 32px; padding: 0; }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12.5px; }
+.field { display: block; margin-bottom: 14px; }
+.field > span { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 6px; font-weight: 500; }
+.input, select.input, textarea.input { width: 100%; height: 32px; padding: 0 10px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); outline: none; }
+textarea.input { height: auto; min-height: 72px; padding: 8px 10px; resize: vertical; line-height: 1.45; }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input:disabled { background: var(--surface-2); color: var(--muted); }
+.seg { display: flex; padding: 2px; gap: 2px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
+.seg button { flex: 1; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; font-size: 12.5px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08); font-weight: 600; }
+.seg button:disabled { cursor: not-allowed; opacity: .55; }
+.radio { display: flex; flex-direction: column; gap: 6px; }
+.radio label { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; background: var(--surface); }
+.radio label:hover { border-color: var(--border-strong); }
+.radio label.on { border-color: var(--accent); background: var(--accent-soft); }
+.radio input { margin: 2px 0 0; accent-color: var(--accent); }
+.radio b { display: block; font-weight: 600; font-size: 13px; }
+.radio small { color: var(--muted); font-size: 12px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; color: var(--text-2); cursor: pointer; }
+.toggle input { appearance: none; width: 32px; height: 18px; border-radius: 999px; background: var(--border-strong); position: relative; cursor: pointer; flex: none; transition: background .15s; }
+.toggle input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.toggle input:checked { background: var(--accent); }
+.toggle input:checked::after { transform: translateX(14px); }
+details.more > summary { list-style: none; cursor: pointer; color: var(--text-2); font-size: 12.5px; display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more[open] > summary svg { transform: rotate(90deg); }
+
+/* ---------- layout ---------- */
+.app { display: grid; grid-template-columns: 300px minmax(0, 1fr) 360px; height: calc(100vh - 56px); }
+.side { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; }
+.right { background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; }
+.center { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.section { padding: 16px; border-bottom: 1px solid var(--border); }
+.section h3 { margin: 0 0 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.section h3 .grow + * { font-weight: 400; }
+.hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.notice { display: flex; gap: 8px; padding: 9px 10px; border-radius: var(--radius); font-size: 12.5px; background: var(--warn-soft); color: var(--warn); margin-bottom: 12px; }
+@media (max-width: 1280px) { .app { grid-template-columns: 280px minmax(0, 1fr); height: auto; } .right { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border); } .center { min-height: 720px; } }
+@media (max-width: 820px) { .app { grid-template-columns: 1fr; } .side { border-right: 0; } }
+
+/* ---------- map ---------- */
+.mapzone { position: relative; flex: 1; min-height: 420px; margin: 12px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--map-bg); overflow: hidden; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.floating { position: absolute; display: flex; gap: 6px; align-items: center; z-index: 2; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 4px; display: flex; gap: 4px; align-items: center; }
+.tl { top: 12px; left: 12px; } .tr { top: 12px; right: 12px; } .bl { bottom: 12px; left: 12px; } .br { bottom: 12px; right: 12px; }
+.panel .seg { border: 0; background: var(--surface-2); }
+.vline { width: 1px; align-self: stretch; background: var(--border); margin: 2px 2px; }
+.dropdown { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 210px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 6px; display: none; }
+.menu.open { display: block; }
+.menu .toggle { padding: 6px 8px; border-radius: 6px; }
+.menu .toggle:hover { background: var(--hover); }
+.coords { font: 12px var(--mono); color: var(--text-2); padding: 4px 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--text-2); padding: 6px 10px; max-width: 520px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; z-index: 1; pointer-events: none; }
+.empty .card { pointer-events: auto; text-align: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 22px 26px; max-width: 340px; }
+.empty .card b { display: block; font-size: 15px; margin-bottom: 4px; }
+.empty .card p { margin: 0 0 14px; color: var(--muted); }
+#confirm { position: absolute; z-index: 5; width: 270px; display: none; }
+#confirm .panel { flex-direction: column; align-items: stretch; padding: 12px; gap: 10px; }
+#confirm p { margin: 0; font-size: 13px; }
+#confirm .row { display: flex; gap: 6px; } #confirm .row .btn { flex: 1; }
+#tip { position: absolute; pointer-events: none; z-index: 3; display: none; font-size: 12px; background: var(--text); color: var(--bg); padding: 4px 8px; border-radius: 6px; white-space: nowrap; }
+
+/* ---------- bottom drawer ---------- */
+.drawer { margin: 0 12px 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); display: flex; flex-direction: column; height: 240px; min-height: 40px; }
+.drawer.min { height: 41px; }
+.tabs { display: flex; align-items: center; gap: 2px; padding: 0 8px; height: 40px; border-bottom: 1px solid var(--border); flex: none; }
+.tab { height: 40px; padding: 0 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.tab.on { color: var(--text); border-bottom-color: var(--text); }
+.tab .count { font-size: 11px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 0 6px; color: var(--text-2); }
+.pane { flex: 1; overflow: auto; display: none; }
+.pane.on { display: block; }
+#log { font: 12px/1.55 var(--mono); padding: 8px 12px; color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+#log div.e { color: var(--bad); } #log div.w { color: var(--warn); } #log div.l { color: var(--info); } #log div.p { color: var(--accent); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; position: sticky; top: 0; background: var(--surface); }
+td.r, th.r { text-align: right; }
+tr:hover td { background: var(--hover); }
+
+/* ---------- right column ---------- */
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); }
+.kpi { background: var(--surface); padding: 12px 16px; min-width: 0; }
+.kpi .label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.kpi .value { font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin-top: 2px; }
+.kpi .value small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 2px; }
+.meter { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 8px; position: relative; overflow: visible; }
+.meter > i { display: block; height: 100%; border-radius: 2px; background: var(--accent); width: 0; }
+.meter > b { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--text-2); border-radius: 1px; }
+.chartwrap { padding: 12px 16px 6px; border-bottom: 1px solid var(--border); position: relative; }
+.chartwrap .label { color: var(--muted); font-size: 12px; margin-bottom: 4px; display: flex; justify-content: space-between; }
+#chart { width: 100%; height: 120px; display: block; }
+.ctip { position: absolute; pointer-events: none; display: none; font-size: 12px; background: var(--text); color: var(--bg); padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.rtabs { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.rpane { padding: 14px 16px; display: none; }
+.rpane.on { display: block; }
+.llm-status { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 6px 0; }
-.chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; font-size: 12px; font-variant-numeric: tabular-nums; }
-.chip.base { border-color: #2f6b4b; color: #8fe0b5; }
-.arrow { color: var(--muted); font-size: 11px; }
-.thought { font-style: italic; color: var(--text); line-height: 1.45; background: var(--panel2); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
-.meta { color: var(--muted); font-size: 12px; line-height: 1.5; }
-.err { color: var(--red); font-size: 12px; }
-.badge { font-size: 11px; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); color: var(--text2); }
-.badge.fb { color: var(--amber); border-color: #5a4710; }
-details summary { cursor: pointer; color: var(--text2); font-size: 12px; margin-top: 6px; }
-/* feeds */
-.feed { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; }
-.item { display: grid; grid-template-columns: 54px 18px 1fr; gap: 6px; align-items: start; font-size: 12.5px; padding: 4px 2px; border-bottom: 1px solid #1d2a36; }
-.item .t { color: var(--muted); font-variant-numeric: tabular-nums; }
-.item .ic { text-align: center; }
-.good { color: var(--green); } .warn { color: var(--amber); } .bad { color: var(--red); } .info { color: var(--cyan); }
-#log { height: 240px; overflow: auto; font: 12px/1.45 ui-monospace, Consolas, "Courier New", monospace; color: var(--text2); background: var(--map-bg); border-radius: 8px; padding: 8px; white-space: pre-wrap; word-break: break-word; }
-#log .w { color: var(--amber); } #log .e { color: var(--red); } #log .l { color: #cfe8ff; } #log .p { color: var(--accent); }
-.bottom { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
-@media (max-width: 1000px) { .bottom { grid-template-columns: 1fr; } }
-table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid #1d2a36; }
-th { color: var(--muted); font-weight: 600; }
-/* modal */
-#modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
-#modal .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); width: min(980px, 100%); max-height: 88vh; overflow: auto; padding: 16px; }
-#modal pre { background: var(--map-bg); padding: 10px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--text2); max-height: 340px; overflow: auto; }
-#modal h3 { font-size: 14px; margin: 14px 0 6px; }
-#toast { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 11; }
-.toast { background: var(--panel); border: 1px solid var(--line); border-left: 0; border-radius: 8px; padding: 9px 12px; font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.4); max-width: 380px; }
-.toast.bad { border-color: #5a2a31; color: #ffb3bb; } .toast.ok { border-color: #2f6b4b; }
+.route { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0; }
+.route .stop { font: 12px var(--mono); padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); }
+.route .stop.base { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); background: var(--ok-soft); }
+.route svg { width: 12px; height: 12px; color: var(--muted); }
+blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 var(--radius) var(--radius) 0; color: var(--text); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; margin-top: 8px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; }
+.err { color: var(--bad); font-size: 12.5px; margin-top: 6px; }
+.history { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; }
+.history .h { padding: 6px 0; border-bottom: 1px dashed var(--border); font-size: 12.5px; }
+.feed .item { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); align-items: start; }
+.feed .ic { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; }
+.feed .ic svg { width: 13px; height: 13px; }
+.feed .ic.ok { background: var(--ok-soft); color: var(--ok); } .feed .ic.bad { background: var(--bad-soft); color: var(--bad); }
+.feed .ic.warn { background: var(--warn-soft); color: var(--warn); } .feed .ic.info { background: var(--surface-2); color: var(--text-2); }
+.feed .t { color: var(--muted); font-size: 12px; }
+.feed .sub { color: var(--muted); font-size: 12px; }
+
+/* ---------- modal & toasts ---------- */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+.overlay.open { display: flex; }
+.dialog { width: min(920px, 100%); max-height: 86vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.dialog header { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); }
+.dialog header b { font-size: 15px; }
+.dialog .body { padding: 16px; }
+.dialog h4 { margin: 18px 0 6px; font-size: 13.5px; }
+.dialog h4:first-child { margin-top: 0; }
+.dialog pre { font: 12px/1.5 var(--mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; color: var(--text-2); }
+.dialog details { margin-top: 6px; } .dialog summary { cursor: pointer; color: var(--text-2); font-size: 12.5px; }
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+.toast { display: flex; gap: 10px; align-items: flex-start; min-width: 260px; max-width: 380px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); animation: up .18s ease-out; }
+.toast svg { margin-top: 1px; }
+.toast.ok svg { color: var(--ok); } .toast.bad svg { color: var(--bad); }
+@keyframes up { from { transform: translateY(6px); opacity: 0; } }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>DID Hack · пульт робота</h1>
-    <div class="sub">TurtleBot3 · Gazebo · ROS 2 · команда IKA</div>
-  </div>
-  <span class="pill" id="pSim"><span class="dot"></span><span>симуляция: —</span></span>
-  <span class="pill" id="pMode"><span class="dot"></span><span>режим: —</span></span>
-  <span class="pill" id="pRun"><span class="dot"></span><span>миссия: —</span></span>
-  <div class="spacer"></div>
-  <span class="pill" id="pTime">t = — с</span>
+<!-- icons -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 13h.01M15 13h.01M9 17h6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5"/></symbol>
+  <symbol id="i-grab" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l10 18H2z"/><path d="M12 10v4M12 18h.01"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand"><span class="logo"><svg class="i"><use href="#i-bot"/></svg></span>Пульт робота <span class="crumb" id="crumb">· DID Hack</span></div>
+  <span class="sep"></span>
+  <span class="status" id="simStatus"><span class="dot"></span><span>Остановлена</span></span>
+  <span class="badge" id="runBadge" style="display:none"></span>
+  <div class="grow"></div>
+  <span class="status num" id="clock"></span>
+  <button class="btn ghost icon" id="themeBtn" title="Тема"><svg class="i"><use href="#i-moon"/></svg></button>
+  <button class="btn accent" id="startBtn"><svg class="i"><use href="#i-play"/></svg>Запустить</button>
+  <button class="btn danger" id="stopBtn" style="display:none"><svg class="i"><use href="#i-stop"/></svg>Остановить</button>
 </header>
 
-<main>
-  <!-- left: launch & control -->
-  <section class="col-left">
-    <div class="card">
-      <h2>Запуск</h2>
-      <label for="fScenario">Сценарий</label>
-      <div class="row">
-        <select id="fScenario"><option value="easy">easy — 3 образца</option><option value="medium" selected>medium — 5 образцов</option><option value="hard">hard — 7 образцов, события</option></select>
-        <input id="fSeed" type="number" placeholder="seed" title="Пусто — готовый сценарий; число — сгенерировать по seed" style="max-width:90px">
+<div class="app">
+  <!-- ===== left: run settings ===== -->
+  <aside class="side">
+    <div class="section">
+      <h3>Миссия</h3>
+      <div class="field"><span>Сценарий</span>
+        <div class="seg" id="scenarioSeg"><button data-v="easy">easy · 3</button><button data-v="medium" class="on">medium · 5</button><button data-v="hard">hard · 7</button></div>
       </div>
-      <label for="fPlanner">Режим планирования</label>
-      <select id="fPlanner">
-        <option value="llm">LLM выбирает цели и порядок</option>
-        <option value="manual">Оператор: цели кликом</option>
-        <option value="scripted">Фиксированный порядок (база)</option>
-      </select>
-      <div id="llmFields">
-        <label for="fModel">Модель LLM</label>
-        <select id="fModel"></select>
-        <label for="fMission">Миссия (текст для модели)</label>
-        <textarea id="fMission"></textarea>
-      </div>
-      <label for="fBattery">Начальный заряд (пусто — 60)</label>
-      <input id="fBattery" type="number" min="1" max="500" step="1" placeholder="60">
-      <label class="check"><input type="checkbox" id="fRviz"> открыть RViz</label>
-      <label class="check"><input type="checkbox" id="fGui"> окно Gazebo (в WSL с артефактами)</label>
-      <div id="keyWarn" class="warnbox" style="display:none">Нет ключа LLM в <code>.env</code> — модель недоступна, агент будет ехать по резервному плану.</div>
-      <div class="btns">
-        <button class="primary" id="bStart">▶ Запустить</button>
-        <button class="danger" id="bStop">■ Остановить</button>
-      </div>
-      <div class="hint" id="startHint">Запуск занимает ~10–15 с: Gazebo, судья, агент.</div>
-    </div>
-
-    <div class="card">
-      <h2>Управление роботом</h2>
-      <div class="seg" id="clickMode">
-        <button data-m="goal" class="on" title="Клик — ехать в точку сейчас">Цель</button>
-        <button data-m="route" title="Клик — добавить точку маршрута">Маршрут</button>
-      </div>
-      <div class="hint">Клик по карте — <b>цель</b> (или точка маршрута в режиме «Маршрут»). <b>Shift+клик</b> — всегда точка маршрута. Доехав до точки, робот сам соберёт образец, если датчик покажет «рядом». В автономном режиме клик перехватывает управление у LLM.</div>
-      <label style="margin-top:14px">Датчик образца <span class="meta">(0 — далеко, 1 — рядом; сбор удаётся ближе 0,3 м)</span></label>
-      <div class="sensor"><div class="sbar"><i id="sensorBar"></i><b class="thr" id="sensorThr" title="порог автосбора"></b></div><span id="sensorVal" class="sval">—</span></div>
-      <div class="meta" id="sensorText"></div>
-      <label class="check"><input type="checkbox" id="fAuto" checked> собирать образец на точке, если датчик показывает «рядом»</label>
-      <div class="btns">
-        <button id="bCollect" title="Остановиться и вызвать /did/collect здесь">◎ Собрать здесь</button>
-      </div>
-      <div class="btns" style="margin-top:8px">
-        <button id="bHome">⌂ Домой и завершить</button>
-        <button id="bCancel">⏸ Стоп робота</button>
-      </div>
-      <div class="hint" id="ctrlHint"></div>
-    </div>
-  </section>
-
-  <!-- center: map -->
-  <section>
-    <div class="card mapcard">
-      <div class="maptools">
-        <h2 style="margin:0">Карта</h2>
-        <div class="spacer"></div>
-        <div class="layers">
-          <label><input type="checkbox" id="lScan" checked> лидар</label>
-          <label><input type="checkbox" id="lJudge" checked> вид судьи</label>
-          <label><input type="checkbox" id="lTrail" checked> след</label>
-          <label><input type="checkbox" id="lMargin" checked> запретная зона</label>
+      <div class="field"><span>Кто планирует</span>
+        <div class="radio" id="plannerRadio">
+          <label class="on"><input type="radio" name="planner" value="llm" checked><div><b>LLM</b><small>модель выбирает цели, порядок и момент возврата</small></div></label>
+          <label><input type="radio" name="planner" value="manual"><div><b>Оператор</b><small>цели и маршрут кликом по карте</small></div></label>
+          <label><input type="radio" name="planner" value="scripted"><div><b>Фиксированный порядок</b><small>базовая линия для сравнения</small></div></label>
         </div>
       </div>
-      <div id="mapwrap">
-        <canvas id="map"></canvas>
-        <div id="maptip"></div>
-        <div id="confirm"><p>Сейчас едет автономная миссия. Перехватить управление и отправить робота сюда?</p>
-          <div class="row"><button class="primary" id="cYes">Перехватить</button><button id="cNo">Отмена</button></div></div>
+      <div id="llmFields">
+        <div class="notice" id="keyWarn" style="display:none"><svg class="i"><use href="#i-alert"/></svg><span>Нет ключа в <code>.env</code> — робот поедет по резервному плану.</span></div>
+        <label class="field"><span>Модель</span><select class="input" id="fModel"></select></label>
+        <label class="field"><span>Текст миссии</span><textarea class="input" id="fMission" rows="3"></textarea></label>
       </div>
-      <div class="legend">
-        <span><i class="sw" style="background:var(--cyan)"></i>робот и путь</span>
-        <span><i class="sw" style="background:#ff5c5c"></i>лидар</span>
-        <span><i class="sw" style="background:#ffd23f"></i>образец</span>
-        <span><i class="sw" style="background:rgba(242,169,0,.45)"></i>дорогой грунт</span>
-        <span><i class="sw" style="background:rgba(229,98,111,.5)"></i>опасная зона</span>
-        <span><i class="sw" style="background:rgba(63,191,127,.45)"></i>база</span>
-        <span><i class="sw" style="background:var(--map-margin)"></i>запретная зона 0,2 м</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- right: telemetry & LLM -->
-  <section class="col-right">
-    <div class="card">
-      <h2>Телеметрия</h2>
-      <div class="tiles">
-        <div class="tile"><div class="v" id="sBattery">—</div><div class="k">заряд</div><div class="bar"><i id="sBatteryBar"></i></div></div>
-        <div class="tile"><div class="v" id="sSamples">—</div><div class="k">образцы</div></div>
-        <div class="tile"><div class="v" id="sScore">—</div><div class="k">счёт</div></div>
-        <div class="tile"><div class="v" id="sPen">—</div><div class="k">штрафы</div></div>
-        <div class="tile"><div class="v" id="sDist">—</div><div class="k">путь, м</div></div>
-        <div class="tile"><div class="v" id="sDrain">—</div><div class="k">расход на метр</div></div>
-      </div>
-      <div style="position:relative; margin-top:12px">
-        <div class="meta" style="margin-bottom:4px">Заряд батареи по времени</div>
-        <svg id="chart" role="img" aria-label="График заряда батареи по времени"></svg>
-        <div class="charttip" id="charttip"></div>
-      </div>
+      <label class="field"><span>Начальный заряд</span><input class="input num" id="fBattery" type="number" min="1" max="500" placeholder="60 (по умолчанию)"></label>
+      <details class="more"><summary><svg class="i"><use href="#i-chev"/></svg>Дополнительно</summary>
+        <div style="padding-top:10px">
+          <label class="field"><span>Seed — сгенерировать сценарий</span><input class="input num" id="fSeed" type="number" placeholder="пусто — готовый сценарий"></label>
+          <label class="toggle">Открыть RViz <input type="checkbox" id="fRviz"></label>
+          <label class="toggle">Окно Gazebo (в WSL с артефактами) <input type="checkbox" id="fGui"></label>
+        </div>
+      </details>
+      <p class="hint" id="runHint" style="margin:10px 0 0">Запуск занимает 10–15 секунд.</p>
     </div>
 
-    <div class="card" id="llmCard">
-      <h2>LLM-планировщик <span class="badge" id="llmModel"></span></h2>
-      <div class="llmstate" id="llmState"><span class="meta">ещё нет решений</span></div>
+    <div class="section">
+      <h3>Датчик образца <span class="grow"></span><span class="num" id="sensorVal" style="font-weight:600">—</span></h3>
+      <div class="meter" style="height:6px"><i id="sensorBar"></i><b id="sensorThr" title="порог автосбора"></b></div>
+      <p class="hint" id="sensorText" style="margin:8px 0 10px">0 — далеко, 1 — рядом. Сбор удаётся ближе 0,3 м.</p>
+      <label class="toggle">Автосбор на точках по датчику <input type="checkbox" id="fAuto" checked></label>
+    </div>
+
+    <div class="section">
+      <h3>Как управлять</h3>
+      <p class="hint" style="margin:0">Клик по карте — <b>цель</b>. Shift+клик или режим «Маршрут» — <b>точка маршрута</b>. Кнопки над картой: собрать здесь, домой, стоп. Во время LLM-миссии клик перехватывает управление.</p>
+    </div>
+  </aside>
+
+  <!-- ===== center: map + drawer ===== -->
+  <main class="center">
+    <div class="mapzone" id="mapzone">
+      <canvas id="map"></canvas>
+      <div class="floating tl panel">
+        <div class="seg" id="clickSeg"><button data-m="goal" class="on" title="Клик — ехать в точку"><svg class="i"><use href="#i-target"/></svg>Цель</button><button data-m="route" title="Клик — добавить точку маршрута"><svg class="i"><use href="#i-route"/></svg>Маршрут</button></div>
+        <span class="vline"></span>
+        <button class="btn sm ghost" id="collectBtn" title="Вызвать /did/collect здесь"><svg class="i"><use href="#i-grab"/></svg>Собрать</button>
+        <button class="btn sm ghost" id="homeBtn" title="Вернуться на базу и завершить"><svg class="i"><use href="#i-home"/></svg>Домой</button>
+        <button class="btn sm ghost" id="cancelBtn" title="Остановить робота и сбросить маршрут"><svg class="i"><use href="#i-pause"/></svg>Стоп</button>
+      </div>
+      <div class="floating tr">
+        <div class="dropdown">
+          <button class="btn sm" id="layersBtn"><svg class="i"><use href="#i-layers"/></svg>Слои<svg class="i"><use href="#i-down"/></svg></button>
+          <div class="menu" id="layersMenu">
+            <label class="toggle">Лидар <input type="checkbox" id="lScan" checked></label>
+            <label class="toggle">Вид судьи (образцы, зоны) <input type="checkbox" id="lJudge" checked></label>
+            <label class="toggle">След робота <input type="checkbox" id="lTrail" checked></label>
+            <label class="toggle">Запретная зона 0,2 м <input type="checkbox" id="lMargin" checked></label>
+          </div>
+        </div>
+      </div>
+      <div class="floating bl panel"><span class="coords num" id="coords">x —  y —</span></div>
+      <div class="floating br panel legend">
+        <span><i style="background:var(--m-robot)"></i>робот, путь</span><span><i style="background:var(--m-scan)"></i>лидар</span>
+        <span><i style="background:var(--m-sample)"></i>образец</span><span><i style="background:rgba(var(--m-terrain),.5)"></i>дорогой грунт</span>
+        <span><i style="background:rgba(var(--m-hazard),.5)"></i>опасная зона</span><span><i style="background:rgba(var(--m-base),.5)"></i>база</span>
+      </div>
+      <div class="empty" id="empty"><div class="card"><b>Симуляция не запущена</b><p>Выберите миссию слева и запустите — Gazebo, судья и агент поднимутся за 10–15 секунд.</p><button class="btn accent" id="emptyStart"><svg class="i"><use href="#i-play"/></svg>Запустить</button></div></div>
+      <div id="tip"></div>
+      <div id="confirm"><div class="panel"><p>Сейчас миссией управляет <b id="cWho">LLM</b>. Перехватить управление и отправить робота сюда?</p><div class="row"><button class="btn accent sm" id="cYes">Перехватить</button><button class="btn sm" id="cNo">Отмена</button></div></div></div>
+    </div>
+
+    <div class="drawer" id="drawer">
+      <div class="tabs">
+        <button class="tab on" data-p="logPane">Лог</button>
+        <button class="tab" data-p="runsPane">История прогонов <span class="count" id="runsCount">0</span></button>
+        <div class="grow"></div>
+        <label class="toggle" style="gap:8px; font-size:12.5px" id="logFilterWrap">Только агент, судья, LLM <input type="checkbox" id="logFilter" checked></label>
+        <button class="btn ghost icon sm" id="drawerBtn" title="Свернуть"><svg class="i"><use href="#i-down"/></svg></button>
+      </div>
+      <div class="pane on" id="logPane"><div id="log"></div></div>
+      <div class="pane" id="runsPane"><table><thead><tr><th>Время</th><th>Сценарий</th><th class="r">Образцы</th><th>Возврат</th><th class="r">Заряд</th><th class="r">Путь, м</th><th class="r">Штрафы</th><th class="r">Счёт</th></tr></thead><tbody id="runsBody"></tbody></table></div>
+    </div>
+  </main>
+
+  <!-- ===== right: metrics, LLM, events ===== -->
+  <aside class="right">
+    <div class="kpis">
+      <div class="kpi"><div class="label">Заряд</div><div class="value num" id="kBattery">—</div><div class="meter"><i id="kBatteryBar"></i></div></div>
+      <div class="kpi"><div class="label">Образцы</div><div class="value num" id="kSamples">—</div></div>
+      <div class="kpi"><div class="label">Счёт</div><div class="value num" id="kScore">—</div></div>
+      <div class="kpi"><div class="label">Штрафы</div><div class="value num" id="kPen">—</div></div>
+      <div class="kpi"><div class="label">Путь</div><div class="value num" id="kDist">—</div></div>
+      <div class="kpi"><div class="label">Расход на метр</div><div class="value num" id="kDrain">—</div></div>
+    </div>
+    <div class="chartwrap">
+      <div class="label"><span>Заряд батареи</span><span class="num" id="chartNow"></span></div>
+      <svg id="chart" role="img" aria-label="Заряд батареи по времени"></svg>
+      <div class="ctip" id="ctip"></div>
+    </div>
+    <div class="tabs rtabs">
+      <button class="tab on" data-r="llmPane">LLM</button>
+      <button class="tab" data-r="feedPane">События <span class="count" id="feedCount">0</span></button>
+    </div>
+    <div class="rpane on" id="llmPane">
+      <div class="llm-status" id="llmStatus"><span class="hint">Решений пока нет. Запустите миссию в режиме LLM.</span></div>
       <div id="llmLast"></div>
-      <details id="llmHist"><summary>история решений</summary><div id="llmHistList" class="meta"></div></details>
-      <div class="btns"><button id="bPrompt">Промпт, ответ и рассуждение модели</button></div>
+      <div class="history" id="llmHistory" style="display:none"></div>
+      <button class="btn" id="promptBtn" style="width:100%; margin-top:14px"><svg class="i"><use href="#i-file"/></svg>Промпт, ответ и рассуждение модели</button>
     </div>
+    <div class="rpane" id="feedPane"><div class="feed" id="feed"><p class="hint">Событий пока нет.</p></div></div>
+  </aside>
+</div>
 
-    <div class="card">
-      <h2>События и подцели</h2>
-      <div class="feed" id="feed"><span class="meta">пока пусто</span></div>
-    </div>
-  </section>
-
-  <div class="bottom">
-    <div class="card">
-      <h2>Лог запуска <span class="spacer"></span><label class="check" style="margin:0"><input type="checkbox" id="logFilter" checked> только агент, судья, LLM</label></h2>
-      <div id="log"></div>
-    </div>
-    <div class="card">
-      <h2>История прогонов</h2>
-      <div style="overflow:auto; max-height:260px"><table id="runs"><thead><tr><th>время</th><th>сценарий</th><th>образцы</th><th>возврат</th><th>заряд</th><th>путь</th><th>штрафы</th><th>счёт</th></tr></thead><tbody></tbody></table></div>
-    </div>
-  </div>
-</main>
-
-<div id="modal"><div class="box"><div class="row" style="align-items:center"><h2 style="margin:0">Журнал LLM</h2><div class="spacer"></div><button id="mClose" style="flex:0">Закрыть</button></div><div id="mBody"></div></div></div>
-<div id="toast"></div>
+<div class="overlay" id="modal"><div class="dialog"><header><b>Журнал LLM</b><div class="grow"></div><button class="btn ghost icon" id="modalClose"><svg class="i"><use href="#i-x"/></svg></button></header><div class="body" id="modalBody"></div></div></div>
+<div class="toasts" id="toasts"></div>
 
 <script>
 'use strict';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : Number(v).toFixed(d).replace('.', ',');
-let S = null, CFG = null, MAP = null, mapImg = null, clickMode = 'goal', pendingClick = null, logNext = 0, lastLlmCount = 0, lastRunState = '';
+const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(Number(v))) ? '—' : Number(v).toFixed(d).replace('.', ',');
+const icon = (name) => `<svg class="i"><use href="#i-${name}"/></svg>`;
+const SENSOR_THR = 0.6;
+const PLANNER_NAME = { llm: 'LLM', manual: 'Оператор', scripted: 'Фиксированный порядок' };
+let S = null, CFG = null, MAP = null, clickMode = 'goal', pendingClick = null, logNext = 0, lastState = '', form = { scenario: 'medium', planner: 'llm' };
 
+// ---------- theme ----------
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('themeBtn').innerHTML = icon(t === 'dark' ? 'sun' : 'moon');
+  try { localStorage.setItem('did-theme', t); } catch (e) { }
+  if (MAP) buildMapImage(); draw();
+}
+let theme = 'light';
+try { theme = localStorage.getItem('did-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (e) { }
+$('themeBtn').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---------- toasts & api ----------
 function toast(msg, kind = 'ok') {
-  const el = document.createElement('div'); el.className = 'toast ' + kind; el.textContent = msg;
-  $('toast').appendChild(el); setTimeout(() => el.remove(), kind === 'bad' ? 7000 : 3500);
+  const el = document.createElement('div'); el.className = 'toast ' + kind;
+  el.innerHTML = icon(kind === 'bad' ? 'alert' : 'check') + `<span>${esc(msg)}</span>`;
+  $('toasts').appendChild(el); setTimeout(() => el.remove(), kind === 'bad' ? 6500 : 3000);
 }
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -275,306 +401,345 @@ async function api(path, body) {
   if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
   return j;
 }
+async function command(path, body, okMsg) { try { await api(path, body); if (okMsg) toast(okMsg); } catch (e) { toast(e.message, 'bad'); } }
 
-// ---------- config & form ----------
-async function loadConfig() {
-  CFG = await api('/api/config');
-  $('fModel').innerHTML = CFG.models.map((m) => `<option>${esc(m)}</option>`).join('');
-  $('fMission').value = CFG.default_mission;
-  updateForm();
-}
-function updateForm() {
-  const llm = $('fPlanner').value === 'llm';
-  $('llmFields').style.display = llm ? '' : 'none';
-  $('keyWarn').style.display = (llm && CFG && !CFG.has_key) ? '' : 'none';
-}
-$('fPlanner').addEventListener('change', updateForm);
-$('bStart').addEventListener('click', async () => {
-  try {
-    $('bStart').disabled = true;
-    await api('/api/start', { scenario: $('fScenario').value, seed: $('fSeed').value, planner: $('fPlanner').value,
-      model: $('fModel').value, mission: $('fMission').value, battery: $('fBattery').value, rviz: $('fRviz').checked, gui: $('fGui').checked });
-    toast('Запуск начат — через 10–15 с появится робот');
-  } catch (e) { toast('Не удалось запустить: ' + e.message, 'bad'); $('bStart').disabled = false; }
-});
-$('bStop').addEventListener('click', async () => {
-  $('bStop').disabled = true; toast('Останавливаю…');
-  try { await api('/api/stop', {}); toast('Остановлено'); } catch (e) { toast(e.message, 'bad'); }
-  $('bStop').disabled = false; loadRuns();
-});
-$('bHome').addEventListener('click', () => command('/api/home', {}, 'Робот едет домой и завершит прогон'));
-$('bCancel').addEventListener('click', () => command('/api/cancel', {}, 'Стоп: маршрут сброшен, управление у оператора'));
-$('bCollect').addEventListener('click', () => command('/api/collect', {}, 'Пробую собрать образец здесь'));
-$('fAuto').addEventListener('change', () => command('/api/auto_collect', { on: $('fAuto').checked }, $('fAuto').checked ? 'Автосбор по датчику включён' : 'Автосбор выключен'));
-const SENSOR_THR = 0.6;
-document.querySelectorAll('#clickMode button').forEach((b) => b.addEventListener('click', () => {
-  clickMode = b.dataset.m; document.querySelectorAll('#clickMode button').forEach((x) => x.classList.toggle('on', x === b));
+// ---------- form ----------
+document.querySelectorAll('#scenarioSeg button').forEach((b) => b.addEventListener('click', () => {
+  form.scenario = b.dataset.v; document.querySelectorAll('#scenarioSeg button').forEach((x) => x.classList.toggle('on', x === b));
 }));
-async function command(path, body, okMsg) {
-  try { await api(path, body); if (okMsg) toast(okMsg); } catch (e) { toast(e.message, 'bad'); }
+document.querySelectorAll('#plannerRadio input').forEach((r) => r.addEventListener('change', () => {
+  form.planner = r.value; document.querySelectorAll('#plannerRadio label').forEach((l) => l.classList.toggle('on', l.contains(r)));
+  updateForm();
+}));
+function updateForm() {
+  const llm = form.planner === 'llm';
+  $('llmFields').style.display = llm ? '' : 'none';
+  $('keyWarn').style.display = llm && CFG && !CFG.has_key ? '' : 'none';
 }
+function setFormDisabled(dis) {
+  document.querySelectorAll('.side .section:first-child input, .side .section:first-child select, .side .section:first-child textarea, #scenarioSeg button').forEach((el) => { el.disabled = dis; });
+}
+async function start() {
+  try {
+    $('startBtn').disabled = $('emptyStart').disabled = true;
+    await api('/api/start', { scenario: form.scenario, planner: form.planner, model: $('fModel').value, mission: $('fMission').value,
+      battery: $('fBattery').value, seed: $('fSeed').value, rviz: $('fRviz').checked, gui: $('fGui').checked });
+    toast('Запуск начат — робот появится через 10–15 с');
+  } catch (e) { toast('Не удалось запустить: ' + e.message, 'bad'); }
+  $('startBtn').disabled = $('emptyStart').disabled = false;
+}
+$('startBtn').addEventListener('click', start);
+$('emptyStart').addEventListener('click', start);
+$('stopBtn').addEventListener('click', async () => {
+  $('stopBtn').disabled = true; toast('Останавливаю…');
+  try { await api('/api/stop', {}); toast('Симуляция остановлена'); } catch (e) { toast(e.message, 'bad'); }
+  $('stopBtn').disabled = false; loadRuns();
+});
+$('collectBtn').addEventListener('click', () => command('/api/collect', {}, 'Пробую собрать образец здесь'));
+$('homeBtn').addEventListener('click', () => command('/api/home', {}, 'Робот возвращается на базу'));
+$('cancelBtn').addEventListener('click', () => command('/api/cancel', {}, 'Робот остановлен, маршрут сброшен'));
+$('fAuto').addEventListener('change', () => command('/api/auto_collect', { on: $('fAuto').checked }, $('fAuto').checked ? 'Автосбор включён' : 'Автосбор выключен'));
+document.querySelectorAll('#clickSeg button').forEach((b) => b.addEventListener('click', () => {
+  clickMode = b.dataset.m; document.querySelectorAll('#clickSeg button').forEach((x) => x.classList.toggle('on', x === b));
+}));
+$('layersBtn').addEventListener('click', (e) => { e.stopPropagation(); $('layersMenu').classList.toggle('open'); });
+document.addEventListener('click', (e) => { if (!$('layersMenu').contains(e.target)) $('layersMenu').classList.remove('open'); });
+['lScan', 'lJudge', 'lTrail', 'lMargin'].forEach((id) => $(id).addEventListener('change', draw));
+document.querySelectorAll('.drawer .tab').forEach((t) => t.addEventListener('click', () => {
+  document.querySelectorAll('.drawer .tab').forEach((x) => x.classList.toggle('on', x === t));
+  document.querySelectorAll('.drawer .pane').forEach((p) => p.classList.toggle('on', p.id === t.dataset.p));
+  $('logFilterWrap').style.visibility = t.dataset.p === 'logPane' ? 'visible' : 'hidden';
+  $('drawer').classList.remove('min'); layout(); draw();
+}));
+$('drawerBtn').addEventListener('click', () => { $('drawer').classList.toggle('min'); setTimeout(() => { layout(); draw(); }, 0); });
+document.querySelectorAll('.rtabs .tab').forEach((t) => t.addEventListener('click', () => {
+  document.querySelectorAll('.rtabs .tab').forEach((x) => x.classList.toggle('on', x === t));
+  document.querySelectorAll('.rpane').forEach((p) => p.classList.toggle('on', p.id === t.dataset.r));
+}));
 
 // ---------- map ----------
+const canvas = $('map'), ctx = canvas.getContext('2d');
+let T = { s: 1, ox: 0, oy: 0, dpr: 1 };
+function hexToRgb(h) { const m = h.replace('#', '').match(/.{2}/g); return m.map((x) => parseInt(x, 16)); }
+function buildMapImage() {
+  const w = MAP.w, h = MAP.h, cols = ['--map-free', '--map-margin', '--map-obstacle', '--map-unknown'].map((v) => hexToRgb(css(v)));
+  const make = (withMargin) => {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d'), img = c.createImageData(w, h);
+    for (let iy = 0; iy < h; iy++) for (let ix = 0; ix < w; ix++) {
+      let v = MAP.cells[iy * w + ix]; if (v === 1 && !withMargin) v = 0;
+      const p = ((h - 1 - iy) * w + ix) * 4, col = cols[v];
+      img.data[p] = col[0]; img.data[p + 1] = col[1]; img.data[p + 2] = col[2]; img.data[p + 3] = v === 3 ? 0 : 255;
+    }
+    c.putImageData(img, 0, 0); return cv;
+  };
+  MAP.img = make(true); MAP.imgNoMargin = make(false);
+}
 async function loadMap() {
   MAP = await api('/api/map');
-  const raw = atob(MAP.data), w = MAP.w, h = MAP.h;
-  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-  const ctx = cv.getContext('2d'), img = ctx.createImageData(w, h);
-  const css = getComputedStyle(document.documentElement);
-  const col = [css.getPropertyValue('--map-free'), css.getPropertyValue('--map-margin'), css.getPropertyValue('--map-obstacle'), css.getPropertyValue('--map-unknown')]
-    .map((c) => c.trim().match(/[0-9a-f]{2}/gi).map((x) => parseInt(x, 16)));
-  MAP.cells = new Uint8Array(w * h);
-  for (let iy = 0; iy < h; iy++) for (let ix = 0; ix < w; ix++) {
-    const v = raw.charCodeAt(iy * w + ix); MAP.cells[iy * w + ix] = v;
-    const p = ((h - 1 - iy) * w + ix) * 4, c = col[v];
-    img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
-  }
-  ctx.putImageData(img, 0, 0); mapImg = cv;
-  // the same without the margin layer
-  const cv2 = document.createElement('canvas'); cv2.width = w; cv2.height = h;
-  const c2 = cv2.getContext('2d'), img2 = c2.createImageData(w, h); img2.data.set(img.data);
-  for (let i = 0; i < w * h; i++) if (MAP.cells[i] === 1) { const iy = Math.floor(i / w), ix = i % w, p = ((h - 1 - iy) * w + ix) * 4; img2.data.set([...col[0], 255], p); }
-  c2.putImageData(img2, 0, 0); MAP.noMargin = cv2;
-  MAP.wx0 = MAP.x0; MAP.wy0 = MAP.y0; MAP.wx1 = MAP.x0 + w * MAP.resolution; MAP.wy1 = MAP.y0 + h * MAP.resolution;
+  const raw = atob(MAP.data); MAP.cells = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) MAP.cells[i] = raw.charCodeAt(i);
+  MAP.wx0 = MAP.x0; MAP.wy0 = MAP.y0; MAP.wx1 = MAP.x0 + MAP.w * MAP.resolution; MAP.wy1 = MAP.y0 + MAP.h * MAP.resolution;
+  buildMapImage();
 }
-const canvas = $('map'), ctx = canvas.getContext('2d');
-let T = { s: 1, ox: 0, oy: 0 };
 function layout() {
   const r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+  canvas.width = Math.max(1, Math.round(r.width * dpr)); canvas.height = Math.max(1, Math.round(r.height * dpr));
   if (!MAP) return;
-  const pad = 8 * dpr, ww = MAP.wx1 - MAP.wx0, wh = MAP.wy1 - MAP.wy0;
-  const s = Math.min((canvas.width - 2 * pad) / ww, (canvas.height - 2 * pad) / wh);
-  T = { s, ox: (canvas.width - ww * s) / 2, oy: (canvas.height - wh * s) / 2, dpr };
+  const padTop = 56 * dpr, pad = 16 * dpr, ww = MAP.wx1 - MAP.wx0, wh = MAP.wy1 - MAP.wy0;
+  const s = Math.min((canvas.width - 2 * pad) / ww, (canvas.height - padTop - 52 * dpr) / wh);
+  T = { s, ox: (canvas.width - ww * s) / 2, oy: padTop + (canvas.height - padTop - 52 * dpr - wh * s) / 2, dpr };
 }
 const W2C = (x, y) => [T.ox + (x - MAP.wx0) * T.s, T.oy + (MAP.wy1 - y) * T.s];
 const C2W = (px, py) => [MAP.wx0 + (px - T.ox) / T.s, MAP.wy1 - (py - T.oy) / T.s];
 function cellAt(x, y) {
   if (!MAP) return 3;
   const ix = Math.floor((x - MAP.x0) / MAP.resolution), iy = Math.floor((y - MAP.y0) / MAP.resolution);
-  if (ix < 0 || iy < 0 || ix >= MAP.w || iy >= MAP.h) return 3;
-  return MAP.cells[iy * MAP.w + ix];
+  return ix < 0 || iy < 0 || ix >= MAP.w || iy >= MAP.h ? 3 : MAP.cells[iy * MAP.w + ix];
 }
 function circle(x, y, r, fill, stroke, lw = 1.5) {
   const [cx, cy] = W2C(x, y); ctx.beginPath(); ctx.arc(cx, cy, r * T.s, 0, Math.PI * 2);
   if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw * T.dpr; ctx.stroke(); }
 }
-function label(x, y, text, color = '#e6edf3', size = 12, dy = 0) {
-  const [cx, cy] = W2C(x, y); ctx.font = `600 ${size * T.dpr}px "Segoe UI", system-ui, sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineWidth = 3 * T.dpr; ctx.strokeStyle = 'rgba(11,17,23,.85)';
-  ctx.strokeText(text, cx, cy + dy * T.dpr); ctx.fillStyle = color; ctx.fillText(text, cx, cy + dy * T.dpr);
+function text(x, y, s, color, size = 11, dy = 0, weight = 600) {
+  const [cx, cy] = W2C(x, y); ctx.font = `${weight} ${size * T.dpr}px ${css('--font')}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = 3.5 * T.dpr; ctx.strokeStyle = css('--m-halo'); ctx.strokeText(s, cx, cy + dy * T.dpr);
+  ctx.fillStyle = color; ctx.fillText(s, cx, cy + dy * T.dpr);
 }
-function polyline(pts, color, lw, dash) {
+function line(pts, color, lw, dash) {
   if (!pts || pts.length < 2) return;
   ctx.beginPath(); pts.forEach((p, i) => { const [cx, cy] = W2C(p[0], p[1]); i ? ctx.lineTo(cx, cy) : ctx.moveTo(cx, cy); });
-  ctx.strokeStyle = color; ctx.lineWidth = lw * T.dpr; ctx.setLineDash(dash ? dash.map((d) => d * T.dpr) : []); ctx.lineJoin = 'round'; ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = color; ctx.lineWidth = lw * T.dpr; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.setLineDash(dash ? dash.map((d) => d * T.dpr) : []); ctx.stroke(); ctx.setLineDash([]);
 }
-function drawMap() {
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--map-bg'); ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (!MAP) return;
+function draw() {
+  ctx.fillStyle = css('--map-bg'); ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!MAP || !MAP.img) return;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage($('lMargin').checked ? mapImg : MAP.noMargin, T.ox, T.oy, MAP.w * MAP.resolution * T.s, MAP.h * MAP.resolution * T.s);
-  const v = (S && S.view) || {}, a = (S && S.agent) || {};
-  if ($('lJudge').checked && v.base) {
-    (v.terrain || []).forEach((z) => { circle(z.cx, z.cy, z.r, 'rgba(242,169,0,.22)', 'rgba(242,169,0,.7)'); label(z.cx, z.cy, `${z.id} ×${String(z.multiplier).replace('.', ',')}`, '#ffd27a', 12); });
-    (v.hazards || []).forEach((h) => { circle(h.cx, h.cy, h.r, 'rgba(229,98,111,.28)', 'rgba(229,98,111,.85)'); label(h.cx, h.cy, h.id, '#ffb3bb', 12); });
+  ctx.drawImage($('lMargin').checked ? MAP.img : MAP.imgNoMargin, T.ox, T.oy, MAP.w * MAP.resolution * T.s, MAP.h * MAP.resolution * T.s);
+  const v = (S && S.view) || {}, a = (S && S.agent) || {}, label = css('--m-label');
+  const rgba = (name, al) => `rgba(${css(name)},${al})`;
+  if ($('lJudge').checked) {
+    (v.terrain || []).forEach((z) => { circle(z.cx, z.cy, z.r, rgba('--m-terrain', .16), rgba('--m-terrain', .75), 1.2); text(z.cx, z.cy, `${z.id} ×${String(z.multiplier).replace('.', ',')}`, rgba('--m-terrain', 1), 11.5); });
+    (v.hazards || []).forEach((h) => { circle(h.cx, h.cy, h.r, rgba('--m-hazard', .18), rgba('--m-hazard', .8), 1.2); text(h.cx, h.cy, h.id, rgba('--m-hazard', 1), 11.5); });
   }
-  if (v.base) { circle(v.base[0], v.base[1], v.base_radius || 0.3, 'rgba(63,191,127,.22)', 'rgba(63,191,127,.8)'); label(v.base[0], v.base[1] - 0.42, 'база', '#8fe0b5', 11); }
-  if ($('lTrail').checked && v.trajectory) polyline(v.trajectory.map((p) => [p[1], p[2]]), 'rgba(242,169,0,.75)', 1.6);
-  if (a.nav && a.nav.path && a.nav.path.length) polyline(a.nav.path, '#36c5f0', 2.5);
-  // route: active goal + pending points
+  if (v.base) { circle(v.base[0], v.base[1], v.base_radius || 0.3, rgba('--m-base', .14), rgba('--m-base', .8), 1.2); text(v.base[0], v.base[1] - 0.44, 'база', rgba('--m-base', 1), 11); }
+  if ($('lTrail').checked && v.trajectory) line(v.trajectory.map((p) => [p[1], p[2]]), rgba('--m-trail', .85), 1.6);
+  if (a.nav && a.nav.path && a.nav.path.length) line(a.nav.path, css('--m-path'), 2.5);
   const route = []; if (a.nav && a.nav.status === 'active' && a.nav.goal) route.push(a.nav.goal);
-  (a.route || []).forEach((p) => { if (!route.length || Math.hypot(p[0] - route[route.length - 1][0], p[1] - route[route.length - 1][1]) > 1e-3) route.push(p); });
-  if (route.length > 1) polyline(route, 'rgba(54,197,240,.55)', 1.5, [6, 5]);
-  route.forEach((p, i) => { circle(p[0], p[1], 0.075, 'rgba(54,197,240,.9)', '#0b1117', 2); label(p[0], p[1], String(i + 1), '#0b1117', 11); });
+  (a.route || []).forEach((p) => { const l = route[route.length - 1]; if (!l || Math.hypot(p[0] - l[0], p[1] - l[1]) > 1e-3) route.push(p); });
+  if (route.length > 1) line(route, css('--m-path'), 1.4, [5, 5]);
+  route.forEach((p, i) => { circle(p[0], p[1], 0.085, css('--m-path'), css('--map-free'), 2); text(p[0], p[1], String(i + 1), '#ffffff', 10.5, 0, 700); });
   if ($('lJudge').checked) (v.samples || []).forEach((s) => {
-    circle(s.x, s.y, 0.06, s.collected ? '#6b7785' : '#ffd23f', '#0b1117', 2);
-    label(s.x, s.y, s.id + (s.collected ? ' ✓' : ''), s.collected ? '#a8b5c2' : '#fff2b8', 11, -14);
+    circle(s.x, s.y, 0.06, s.collected ? css('--m-sample-done') : css('--m-sample'), css('--map-free'), 2);
+    text(s.x, s.y, s.id + (s.collected ? ' ✓' : ''), s.collected ? css('--muted') : label, 11, -15);
   });
-  if ($('lScan').checked && a.scan) { ctx.fillStyle = '#ff5c5c'; a.scan.forEach((p) => { const [cx, cy] = W2C(p[0], p[1]); ctx.fillRect(cx - 1.5 * T.dpr, cy - 1.5 * T.dpr, 3 * T.dpr, 3 * T.dpr); }); }
+  if ($('lScan').checked && a.scan) { ctx.fillStyle = css('--m-scan'); const r = 1.6 * T.dpr; a.scan.forEach((p) => { const [cx, cy] = W2C(p[0], p[1]); ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }); }
   if (a.pose) {
-    const [cx, cy] = W2C(a.pose.x, a.pose.y), r = 0.105 * T.s, yaw = -a.pose.yaw;
-    ctx.save(); ctx.translate(cx, cy); ctx.rotate(yaw);
-    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(54,197,240,.25)'; ctx.fill(); ctx.strokeStyle = '#36c5f0'; ctx.lineWidth = 2 * T.dpr; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(r * 1.45, 0); ctx.lineTo(-r * 0.4, r * 0.65); ctx.lineTo(-r * 0.4, -r * 0.65); ctx.closePath(); ctx.fillStyle = '#36c5f0'; ctx.fill();
+    const [cx, cy] = W2C(a.pose.x, a.pose.y), r = Math.max(0.105 * T.s, 7 * T.dpr), col = css('--m-robot');
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-a.pose.yaw);
+    ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = col; ctx.globalAlpha = .18; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.lineWidth = 2 * T.dpr; ctx.strokeStyle = col; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r * 1.5, 0); ctx.lineTo(-r * .35, r * .62); ctx.lineTo(-r * .1, 0); ctx.lineTo(-r * .35, -r * .62); ctx.closePath(); ctx.fillStyle = col; ctx.fill();
     ctx.restore();
   }
-  if (!S || !S.sim || !S.sim.running) { label((MAP.wx0 + MAP.wx1) / 2, MAP.wy1 - 0.25, 'симуляция не запущена — нажмите «Запустить»', '#a8b5c2', 13); }
 }
 canvas.addEventListener('mousemove', (e) => {
-  if (!MAP) return; const r = canvas.getBoundingClientRect(), dpr = T.dpr || 1;
-  const [x, y] = C2W((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr), c = cellAt(x, y);
-  const tip = $('maptip'); tip.style.display = 'block'; tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 12) + 'px';
-  tip.innerHTML = `x ${fmt(x, 2)} · y ${fmt(y, 2)} — ${['свободно', 'запретная зона: робот встанет рядом', 'препятствие', 'вне арены'][c]}`;
+  if (!MAP) return; const r = canvas.getBoundingClientRect();
+  const [x, y] = C2W((e.clientX - r.left) * T.dpr, (e.clientY - r.top) * T.dpr), c = cellAt(x, y);
+  $('coords').textContent = `x ${fmt(x, 2)}   y ${fmt(y, 2)}`;
+  const tip = $('tip'); tip.style.display = 'block'; tip.style.left = (e.clientX - r.left + 14) + 'px'; tip.style.top = (e.clientY - r.top + 14) + 'px';
+  tip.textContent = ['свободно', 'запретная зона — робот встанет рядом', 'препятствие', 'вне арены'][c];
 });
-canvas.addEventListener('mouseleave', () => { $('maptip').style.display = 'none'; });
+canvas.addEventListener('mouseleave', () => { $('tip').style.display = 'none'; });
 canvas.addEventListener('click', (e) => {
-  if (!MAP) return; const r = canvas.getBoundingClientRect(), dpr = T.dpr || 1;
-  const [x, y] = C2W((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr);
-  if (cellAt(x, y) === 3) { toast('Точка вне арены', 'bad'); return; }
-  if (!S || !S.live) { toast('Симуляция ещё не работает — сначала «Запустить»', 'bad'); return; }
+  if (!MAP) return; const r = canvas.getBoundingClientRect();
+  const [x, y] = C2W((e.clientX - r.left) * T.dpr, (e.clientY - r.top) * T.dpr);
+  if (cellAt(x, y) === 3) return toast('Эта точка вне арены', 'bad');
+  if (!S || !S.live) return toast('Сначала запустите симуляцию', 'bad');
   const route = e.shiftKey || clickMode === 'route', a = S.agent || {};
   const send = () => command(route ? '/api/point' : '/api/goal', { x, y }, route ? `Точка маршрута (${fmt(x, 2)}; ${fmt(y, 2)})` : `Цель (${fmt(x, 2)}; ${fmt(y, 2)})`);
   if (a.mode && a.mode !== 'manual' && a.executor !== 'done') {
-    pendingClick = send; const box = $('confirm');
-    box.style.left = Math.min(e.clientX - r.left, r.width - 260) + 'px'; box.style.top = Math.min(e.clientY - r.top + 10, r.height - 110) + 'px'; box.style.display = 'block';
+    pendingClick = send; $('cWho').textContent = PLANNER_NAME[a.mode] || a.mode;
+    const box = $('confirm'); box.style.left = Math.min(e.clientX - r.left, r.width - 280) + 'px'; box.style.top = Math.min(e.clientY - r.top + 12, r.height - 130) + 'px'; box.style.display = 'block';
   } else send();
 });
 $('cYes').addEventListener('click', () => { $('confirm').style.display = 'none'; if (pendingClick) pendingClick(); pendingClick = null; });
 $('cNo').addEventListener('click', () => { $('confirm').style.display = 'none'; pendingClick = null; });
-['lScan', 'lJudge', 'lTrail', 'lMargin'].forEach((id) => $(id).addEventListener('change', drawMap));
 
-// ---------- battery chart (single series: title names it, no legend; hover crosshair) ----------
+// ---------- chart: one series -> no legend; hover crosshair ----------
 function drawChart() {
-  const svg = $('chart'), w = svg.clientWidth || 340, h = svg.clientHeight || 130;
+  const svg = $('chart'), w = svg.clientWidth || 320, h = svg.clientHeight || 120;
   const hist = (S && S.battery_hist) || [], b0 = (S && S.view && S.view.battery0) || 60;
-  const L = 34, R = 8, Tp = 6, B = 20, tmax = Math.max(30, hist.length ? hist[hist.length - 1][0] : 30);
+  const L = 28, R = 6, Tp = 6, B = 18, tmax = Math.max(30, hist.length ? hist[hist.length - 1][0] : 30);
   const X = (t) => L + (t / tmax) * (w - L - R), Y = (b) => Tp + (1 - b / b0) * (h - Tp - B);
+  const grid = css('--border'), muted = css('--muted'), acc = css('--accent');
   let g = '';
-  [0, 0.5, 1].forEach((f) => { const yv = b0 * f, y = Y(yv); g += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="#263647" stroke-width="1"/><text x="${L - 6}" y="${y + 4}" fill="#7c8b9a" font-size="10" text-anchor="end">${fmt(yv, 0)}</text>`; });
-  [0, 0.5, 1].forEach((f) => { const t = tmax * f; g += `<text x="${X(t)}" y="${h - 5}" fill="#7c8b9a" font-size="10" text-anchor="middle">${fmt(t, 0)} с</text>`; });
-  if (hist.length > 1) g += `<polyline fill="none" stroke="#2bb59a" stroke-width="2" stroke-linejoin="round" points="${hist.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
-  g += `<line id="cx" x1="0" x2="0" y1="${Tp}" y2="${h - B}" stroke="#a8b5c2" stroke-width="1" visibility="hidden"/><circle id="cd" r="4" fill="#2bb59a" stroke="#151f29" stroke-width="2" visibility="hidden"/>`;
+  [0, .5, 1].forEach((f) => { const y = Y(b0 * f); g += `<line x1="${L}" x2="${w - R}" y1="${y}" y2="${y}" stroke="${grid}"/><text x="${L - 6}" y="${y + 3.5}" fill="${muted}" font-size="10" text-anchor="end">${fmt(b0 * f, 0)}</text>`; });
+  [0, .5, 1].forEach((f) => { g += `<text x="${X(tmax * f)}" y="${h - 4}" fill="${muted}" font-size="10" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${fmt(tmax * f, 0)} с</text>`; });
+  if (hist.length > 1) g += `<polyline fill="none" stroke="${acc}" stroke-width="2" stroke-linejoin="round" points="${hist.map((p) => `${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join(' ')}"/>`;
+  g += `<line id="cx" y1="${Tp}" y2="${h - B}" stroke="${muted}" visibility="hidden"/><circle id="cd" r="4" fill="${acc}" stroke="${css('--surface')}" stroke-width="2" visibility="hidden"/>`;
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.innerHTML = g;
+  $('chartNow').textContent = hist.length ? `${fmt(hist[hist.length - 1][1], 1)} из ${fmt(b0, 0)}` : '';
   svg.onmousemove = (e) => {
     if (hist.length < 2) return; const r = svg.getBoundingClientRect(), t = ((e.clientX - r.left - L) / (w - L - R)) * tmax;
     let best = hist[0]; for (const p of hist) if (Math.abs(p[0] - t) < Math.abs(best[0] - t)) best = p;
     const cx = X(best[0]), cy = Y(best[1]); const ln = svg.querySelector('#cx'), d = svg.querySelector('#cd');
     ln.setAttribute('x1', cx); ln.setAttribute('x2', cx); ln.setAttribute('visibility', 'visible'); d.setAttribute('cx', cx); d.setAttribute('cy', cy); d.setAttribute('visibility', 'visible');
-    const tip = $('charttip'); tip.style.display = 'block'; tip.style.left = Math.min(cx + 10, w - 120) + 'px'; tip.style.top = (cy + 6) + 'px';
-    tip.textContent = `t = ${fmt(best[0], 0)} с · заряд ${fmt(best[1], 2)}`;
+    const tip = $('ctip'); tip.style.display = 'block'; tip.style.left = Math.min(cx + 22, w - 110) + 'px'; tip.style.top = (cy + 26) + 'px';
+    tip.textContent = `${fmt(best[0], 0)} с · ${fmt(best[1], 2)}`;
   };
-  svg.onmouseleave = () => { $('charttip').style.display = 'none'; const ln = svg.querySelector('#cx'), d = svg.querySelector('#cd'); if (ln) { ln.setAttribute('visibility', 'hidden'); d.setAttribute('visibility', 'hidden'); } };
+  svg.onmouseleave = () => { $('ctip').style.display = 'none'; ['#cx', '#cd'].forEach((q) => { const el = svg.querySelector(q); if (el) el.setAttribute('visibility', 'hidden'); }); };
 }
 
-// ---------- panels ----------
-function pill(id, cls, text) { const el = $(id); el.className = 'pill ' + cls; el.lastElementChild.textContent = text; }
-const MODE = { llm: 'LLM', manual: 'оператор', scripted: 'фиксированный' };
+// ---------- render ----------
+function setStatus(cls, txt) { $('simStatus').innerHTML = `<span class="dot ${cls}"></span><span>${esc(txt)}</span>`; }
 function render() {
   if (!S) return;
   const sim = S.sim || {}, sc = S.score || {}, a = S.agent || {};
-  // header
-  if (!sim.running) pill('pSim', '', 'симуляция: остановлена');
-  else if (!S.live) pill('pSim', 'warn', 'симуляция: запускается…');
-  else pill('pSim', 'ok', 'симуляция: работает' + (sim.own ? '' : ' (вне панели)'));
-  pill('pMode', a.mode ? 'ok' : '', 'режим: ' + (MODE[a.mode] || '—'));
-  const st = sc.state, runTxt = { running: 'идёт', finished: sc.returned ? 'завершена, возврат засчитан' : 'завершена без возврата', depleted: 'батарея разряжена' }[st] || '—';
-  pill('pRun', st === 'finished' && sc.returned ? 'ok' : st === 'depleted' || (st === 'finished' && !sc.returned) ? 'bad' : st === 'running' ? 'warn' : '', 'миссия: ' + runTxt);
-  $('pTime').textContent = 't = ' + fmt(sc.t, 0) + ' с';
-  $('bStart').disabled = !!sim.running; $('bStop').disabled = false;
-  $('startHint').textContent = sim.running ? (sim.own ? `Запущено: ${sim.params.scenario}, ${MODE[sim.params.planner]}${sim.params.battery ? ', заряд ' + sim.params.battery : ''} · ${sim.uptime} с` : 'Симуляция запущена из терминала — панель видит её данные.') : 'Запуск занимает ~10–15 с: Gazebo, судья, агент.';
-  $('ctrlHint').textContent = a.mode && a.mode !== 'manual' ? 'Сейчас миссией управляет ' + MODE[a.mode] + '. Клик по карте, «Домой» или «Стоп» перехватят управление.' : a.mode === 'manual' ? 'Режим оператора: робот ждёт цели.' : '';
-  // tiles
+  const running = !!sim.running;
+  if (!running) setStatus('', 'Остановлена');
+  else if (!S.live) setStatus('warn', 'Запускается…');
+  else setStatus('ok', 'Работает' + (sim.own ? '' : ' · запущена вне пульта'));
+  $('startBtn').style.display = running ? 'none' : ''; $('stopBtn').style.display = running ? '' : 'none';
+  $('empty').style.display = running ? 'none' : '';
+  setFormDisabled(running);
+  const p = sim.params || {};
+  $('crumb').textContent = running && sim.own ? `· ${p.scenario} · ${PLANNER_NAME[p.planner] || p.planner}${p.battery ? ' · заряд ' + p.battery : ''}` : '· DID Hack';
+  $('runHint').textContent = running ? 'Параметры применятся при следующем запуске.' : 'Запуск занимает 10–15 секунд.';
+  const st = sc.state, badge = $('runBadge');
+  if (st && running) {
+    const map = { running: ['warn', a.mode ? 'Миссия · ' + (PLANNER_NAME[a.mode] || a.mode) : 'Миссия идёт'], finished: sc.returned ? ['ok', 'Завершена · возврат засчитан'] : ['bad', 'Завершена без возврата'], depleted: ['bad', 'Батарея разряжена'] };
+    const [cls, txt] = map[st] || ['', st]; badge.className = 'badge ' + cls; badge.textContent = txt; badge.style.display = '';
+  } else badge.style.display = 'none';
+  $('clock').textContent = sc.t != null && running ? `t = ${fmt(sc.t, 0)} с` : '';
+  // KPIs
   const b0 = (S.view && S.view.battery0) || 60, bat = S.battery ?? sc.battery;
-  $('sBattery').textContent = fmt(bat, 1); $('sBatteryBar').style.width = (bat == null ? 0 : Math.max(0, Math.min(100, bat / b0 * 100))) + '%';
-  $('sBatteryBar').style.background = bat != null && bat / b0 < 0.2 ? 'var(--red)' : 'var(--accent)';
-  $('sSamples').textContent = sc.samples_total != null ? `${sc.collected}/${sc.samples_total}` : '—';
-  $('sScore').textContent = fmt(sc.score, 1);
+  $('kBattery').innerHTML = bat == null ? '—' : `${fmt(bat, 1)}<small>/ ${fmt(b0, 0)}</small>`;
+  $('kBatteryBar').style.width = (bat == null ? 0 : Math.max(0, Math.min(100, bat / b0 * 100))) + '%';
+  $('kBatteryBar').style.background = bat != null && bat / b0 < 0.2 ? 'var(--bad)' : 'var(--accent)';
+  $('kSamples').innerHTML = sc.samples_total != null ? `${sc.collected}<small>/ ${sc.samples_total}</small>` : '—';
+  $('kScore').textContent = fmt(sc.score, 1);
   const pen = sc.penalties ? Object.values(sc.penalties).reduce((x, y) => x + y, 0) : null;
-  $('sPen').textContent = pen == null ? '—' : pen; $('sPen').className = 'v' + (pen ? ' bad' : '');
-  $('sDist').textContent = fmt(sc.distance, 1); $('sDrain').textContent = fmt(a.drain_per_meter, 2);
-  // sample sensor (smoothed by the agent)
+  $('kPen').textContent = pen == null ? '—' : pen; $('kPen').style.color = pen ? 'var(--bad)' : '';
+  $('kDist').innerHTML = sc.distance == null ? '—' : `${fmt(sc.distance, 1)}<small>м</small>`;
+  $('kDrain').textContent = fmt(a.drain_per_meter, 2);
+  // sensor
   const sv = a.sensor;
   $('sensorVal').textContent = fmt(sv, 2);
   $('sensorBar').style.width = (sv == null ? 0 : Math.max(0, Math.min(1, sv)) * 100) + '%';
-  $('sensorBar').style.background = sv != null && sv >= SENSOR_THR ? 'var(--green)' : 'var(--amber)';
-  $('sensorThr').style.left = (SENSOR_THR * 100) + '%';
-  $('sensorText').textContent = sv == null ? '' : sv >= SENSOR_THR ? 'образец рядом — можно собирать' : sv >= 0.3 ? 'тепло: образец в ~0,3–0,8 м' : 'холодно: образец далеко';
+  $('sensorBar').style.background = sv != null && sv >= SENSOR_THR ? 'var(--ok)' : 'var(--warn)';
+  $('sensorThr').style.left = SENSOR_THR * 100 + '%';
+  $('sensorText').textContent = sv == null ? '0 — далеко, 1 — рядом. Сбор удаётся ближе 0,3 м.' : sv >= SENSOR_THR ? 'Образец рядом — можно собирать.' : sv >= 0.3 ? 'Тепло: образец примерно в 0,3–0,8 м.' : 'Холодно: образец далеко.';
   if (a.auto_collect !== undefined && document.activeElement !== $('fAuto')) $('fAuto').checked = !!a.auto_collect;
-  $('bCollect').disabled = !S.live;
-  drawChart(); renderLLM(); renderFeed(); drawMap();
-  if (st && st !== lastRunState && st !== 'running') loadRuns();
-  lastRunState = st || '';
+  ['collectBtn', 'homeBtn', 'cancelBtn'].forEach((id) => { $(id).disabled = !S.live; });
+  drawChart(); renderLLM(); renderFeed(); draw();
+  if (st !== lastState && st && st !== 'running') loadRuns();
+  lastState = st || '';
 }
-function planChips(plan) {
+function routeHtml(plan) {
   const order = (plan || []).filter((s) => s.startsWith('goto ')).map((s) => s.split(' ')[1]);
-  return '<div class="chips">' + order.map((id) => `<span class="chip">${esc(id)}</span><span class="arrow">→</span>`).join('') + '<span class="chip base">база</span></div>';
+  return '<div class="route">' + order.map((id) => `<span class="stop">${esc(id)}</span>${icon('arrow')}`).join('') + '<span class="stop base">база</span></div>';
 }
 function renderLLM() {
   const recs = S.llm || [], a = S.agent || {};
-  $('llmCard').style.display = (a.planner === 'LLMPlanner' || recs.length || (S.sim && S.sim.params && S.sim.params.planner === 'llm')) ? '' : 'none';
-  $('llmModel').textContent = (recs.length && recs[recs.length - 1].model) || (S.sim && S.sim.params && S.sim.params.model) || '';
-  if (a.thinking) $('llmState').innerHTML = '<span class="spin"></span><span>модель думает… робот ждёт на месте</span>';
-  else if (recs.length) { const r = recs[recs.length - 1]; $('llmState').innerHTML = r.fallback ? '<span class="badge fb">резервный план</span><span class="meta">модель не дала корректный ответ</span>' : '<span class="badge">план принят</span>'; }
-  else $('llmState').innerHTML = '<span class="meta">ещё нет решений</span>';
-  if (!recs.length) { $('llmLast').innerHTML = ''; $('llmHistList').innerHTML = ''; return; }
+  if (a.thinking) $('llmStatus').innerHTML = '<span class="spinner"></span><span>Модель думает — робот ждёт на месте</span>';
+  else if (recs.length) { const r = recs[recs.length - 1]; $('llmStatus').innerHTML = r.fallback ? '<span class="badge warn">Резервный план</span><span class="hint">модель не дала корректный ответ</span>' : '<span class="badge ok">План принят</span><span class="hint">' + esc(r.model || '') + '</span>'; }
+  else $('llmStatus').innerHTML = '<span class="hint">Решений пока нет. Запустите миссию в режиме LLM.</span>';
+  if (!recs.length) { $('llmLast').innerHTML = ''; $('llmHistory').style.display = 'none'; return; }
   const r = recs[recs.length - 1], lat = r.attempts.reduce((x, t) => x + (t.latency || 0), 0), errs = r.attempts.filter((t) => t.error);
-  $('llmLast').innerHTML = `<div class="meta">t = ${fmt(r.t, 0)} с · причина: <b style="color:var(--text)">${esc(r.trigger)}</b></div>${planChips(r.plan)}
-    <div class="thought">«${esc(r.thought || '—')}»</div>
-    <div class="meta">попыток ${r.attempts.length} · ${fmt(lat, 1)} с · прогноз расхода ${fmt(r.predicted_battery, 2)}${r.options && r.options.length ? ' · вариантов от алгоритма: ' + r.options.length : ''}</div>
-    ${errs.map((t) => `<div class="err">отклонено: ${esc(t.error)}</div>`).join('')}`;
-  $('llmHistList').innerHTML = recs.slice(0, -1).reverse().map((h) => `<div style="margin-top:6px">t=${fmt(h.t, 0)} с · ${esc(h.trigger)}${h.fallback ? ' · <span class="warn">резерв</span>' : ''}<br>${esc((h.plan || []).filter((s) => s.startsWith('goto')).map((s) => s.split(' ')[1]).concat('база').join(' → '))}</div>`).join('') || 'только одно решение';
-  if (recs.length !== lastLlmCount) { lastLlmCount = recs.length; }
+  $('llmLast').innerHTML = `${routeHtml(r.plan)}<blockquote>${esc(r.thought || '—')}</blockquote>
+    <dl class="kv"><dt>Причина</dt><dd>${esc(r.trigger)}</dd><dt>Время</dt><dd class="num">t = ${fmt(r.t, 0)} с · ответ за ${fmt(lat, 1)} с · попыток ${r.attempts.length}</dd>
+    <dt>Прогноз</dt><dd class="num">расход ${fmt(r.predicted_battery, 2)}${r.options && r.options.length ? ' · вариантов от алгоритма ' + r.options.length : ''}</dd></dl>
+    ${errs.map((t) => `<div class="err">Отклонено проверкой: ${esc(t.error)}</div>`).join('')}`;
+  const hist = recs.slice(0, -1).reverse();
+  $('llmHistory').style.display = hist.length ? '' : 'none';
+  $('llmHistory').innerHTML = '<div class="hint" style="margin-bottom:4px">Предыдущие решения</div>' + hist.map((h) => `<div class="h"><span class="num">t = ${fmt(h.t, 0)} с</span> · ${esc(h.trigger)}${h.fallback ? ' · <span style="color:var(--warn)">резерв</span>' : ''}<br><span class="hint">${esc((h.plan || []).filter((s) => s.startsWith('goto')).map((s) => s.split(' ')[1]).concat('база').join(' → '))}</span></div>`).join('');
 }
-const EV = { sample_collected: ['✓', 'good', 'образец собран'], collision: ['✕', 'bad', 'столкновение'], false_collect: ['!', 'warn', 'ложный сбор'], hazard_hit: ['⚠', 'bad', 'опасная зона'] };
-const KIND = { goto: 'поездка', collect: 'сбор', return: 'возврат', finish: 'финиш', explore: 'разведка' };
+const EV = { sample_collected: ['check', 'ok', 'Образец собран'], collision: ['x', 'bad', 'Столкновение'], false_collect: ['alert', 'warn', 'Ложный сбор'], hazard_hit: ['alert', 'bad', 'Опасная зона'] };
+const KIND = { goto: 'Поездка', collect: 'Сбор', return: 'Возврат', finish: 'Финиш', explore: 'Разведка' };
 function renderFeed() {
   const items = [];
-  (S.events || []).forEach((e) => { const d = EV[e.type] || ['•', 'info', e.type]; items.push({ t: e.t, ic: d[0], cls: d[1], text: `${d[2]}${e.sample ? ' ' + e.sample : ''}${e.zone ? ' ' + e.zone : ''}${e.penalty ? ' (' + e.penalty + ')' : ''}` }); });
+  (S.events || []).forEach((e) => { const d = EV[e.type] || ['dot', 'info', e.type]; items.push({ t: e.t, ic: d[0], cls: d[1], title: d[2] + (e.sample ? ' ' + e.sample : '') + (e.zone ? ' ' + e.zone : ''), sub: e.penalty ? `штраф ${e.penalty}` : '' }); });
   (S.journal || []).forEach((j) => {
     const tgt = j.target ? ` (${fmt(j.target[0], 2)}; ${fmt(j.target[1], 2)})` : '';
-    const extra = j.distance > 0.05 ? ` · ${fmt(j.distance, 2)} м, −${fmt(j.battery_used, 2)} заряда` : '';
-    items.push({ t: j.t, ic: j.success ? '→' : '✕', cls: j.success ? 'info' : 'warn', text: `${KIND[j.kind] || j.kind}${tgt}: ${j.message}${extra}`, title: j.reason });
+    items.push({ t: j.t, ic: j.success ? 'arrow' : 'x', cls: j.success ? 'info' : 'warn', title: (KIND[j.kind] || j.kind) + tgt,
+      sub: j.message + (j.distance > 0.05 ? ` · ${fmt(j.distance, 2)} м, −${fmt(j.battery_used, 2)}` : ''), hint: j.reason });
   });
   items.sort((x, y) => y.t - x.t);
-  $('feed').innerHTML = items.length ? items.slice(0, 60).map((i) => `<div class="item" title="${esc(i.title || '')}"><span class="t">${fmt(i.t, 1)} с</span><span class="ic ${i.cls}">${i.ic}</span><span>${esc(i.text)}</span></div>`).join('') : '<span class="meta">пока пусто</span>';
+  $('feedCount').textContent = items.length;
+  $('feed').innerHTML = items.length ? items.slice(0, 80).map((i) => `<div class="item" title="${esc(i.hint || '')}"><span class="ic ${i.cls}">${icon(i.ic)}</span><div><div>${esc(i.title)}</div>${i.sub ? `<div class="sub">${esc(i.sub)}</div>` : ''}</div><span class="t num">${fmt(i.t, 1)} с</span></div>`).join('') : '<p class="hint">Событий пока нет.</p>';
 }
 
 // ---------- log & runs ----------
-const LOGKEEP = /did_agent|did_judge|LLM|панель|ERROR|Error|died|Traceback|already running/;
+const KEEP = /did_agent|did_judge|LLM|панель|ERROR|Error|died|Traceback|already running/;
+function prettyLog(l) {
+  l = l.replace(/^\[(agent|judge)-\d+\] /, '$1 · ').replace(/\[(INFO|WARN|ERROR)\] /, '').replace(/\[did_(agent|judge)\]: /, '');
+  const m = l.match(/subgoal: \{'t': ([\d.]+), 'kind': '(\w+)'.*?'success': (True|False), 'message': '([^']*)'(?:.*?'battery_used': ([\d.]+), 'distance': ([\d.]+))?/);
+  if (m) return l.split(' · ')[0] + ` · t=${m[1]} ${m[2]} ${m[3] === 'True' ? '✓' : '✗'} ${m[4]}` + (m[6] && +m[6] > 0.05 ? ` (${(+m[6]).toFixed(2)} м, −${(+m[5]).toFixed(2)})` : '');
+  const e = l.match(/event: \{'type': '(\w+)', 't': ([\d.]+).*?(?:'sample': '(\w+)')?\}/);
+  if (e) return l.split(' · ')[0] + ` · t=${e[2]} событие ${e[1]}${e[3] ? ' ' + e[3] : ''}`;
+  return l;
+}
 async function pollLog() {
   try {
     const r = await api('/api/log?since=' + logNext); logNext = r.next;
-    if (r.lines.length) {
-      const el = $('log'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-      const html = r.lines.filter((l) => !$('logFilter').checked || LOGKEEP.test(l)).map((l) => {
-        const cls = /ERROR|Error|died|Traceback|REJECTED|rejected/.test(l) ? 'e' : /WARN|warn/.test(l) ? 'w' : /LLM \[/.test(l) ? 'l' : /панель/.test(l) ? 'p' : '';
-        return `<div class="${cls}">${esc(l.replace(/^\[(agent|judge)-\d+\] /, '[$1] ').replace(/\[INFO\] |\[WARN\] /, ''))}</div>`;
-      }).join('');
-      el.insertAdjacentHTML('beforeend', html);
-      while (el.childElementCount > 1200) el.firstElementChild.remove();
-      if (atBottom) el.scrollTop = el.scrollHeight;
-    }
-  } catch (e) { /* server restarting */ }
+    if (!r.lines.length) return;
+    const el = $('log'), pane = $('logPane'), atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 30;
+    el.insertAdjacentHTML('beforeend', r.lines.filter((l) => !$('logFilter').checked || KEEP.test(l)).map((l) => {
+      const cls = /ERROR|Error|died|Traceback|rejected|REJECTED/.test(l) ? 'e' : /WARN/.test(l) ? 'w' : /LLM \[/.test(l) ? 'l' : /панель/.test(l) ? 'p' : '';
+      return `<div class="${cls}">${esc(prettyLog(l))}</div>`;
+    }).join(''));
+    while (el.childElementCount > 1500) el.firstElementChild.remove();
+    if (atBottom) pane.scrollTop = pane.scrollHeight;
+  } catch (e) { }
 }
 async function loadRuns() {
   try {
     const runs = await api('/api/runs');
-    $('runs').querySelector('tbody').innerHTML = runs.map((r) => {
-      const pen = r.penalties ? Object.values(r.penalties).reduce((x, y) => x + y, 0) : 0;
-      const t = r.time ? `${r.time.slice(6, 8)}.${r.time.slice(4, 6)} ${r.time.slice(9, 11)}:${r.time.slice(11, 13)}` : '';
-      return `<tr><td>${t}</td><td>${esc(r.scenario)}</td><td>${r.collected}/${r.total}</td><td class="${r.returned ? 'good' : 'bad'}">${r.returned ? 'да' : 'нет'}</td><td>${fmt(r.battery, 1)}</td><td>${fmt(r.distance, 1)}</td><td class="${pen ? 'bad' : ''}">${pen}</td><td>${fmt(r.score, 2)}</td></tr>`;
-    }).join('') || '<tr><td colspan="8" class="meta">прогонов пока нет</td></tr>';
+    $('runsCount').textContent = runs.length;
+    $('runsBody').innerHTML = runs.map((r) => {
+      const pen = r.penalties ? Object.values(r.penalties).reduce((x, y) => x + y, 0) : 0, t = r.time || '';
+      return `<tr><td class="num">${t.slice(6, 8)}.${t.slice(4, 6)} ${t.slice(9, 11)}:${t.slice(11, 13)}</td><td>${esc(r.scenario)}</td><td class="r num">${r.collected}/${r.total}</td>
+        <td><span class="badge ${r.returned ? 'ok' : 'bad'}">${r.returned ? 'да' : 'нет'}</span></td><td class="r num">${fmt(r.battery, 1)}</td><td class="r num">${fmt(r.distance, 1)}</td>
+        <td class="r num" style="${pen ? 'color:var(--bad)' : ''}">${pen}</td><td class="r num"><b>${fmt(r.score, 2)}</b></td></tr>`;
+    }).join('') || '<tr><td colspan="8" class="hint">Прогонов пока нет.</td></tr>';
   } catch (e) { }
 }
 
-// ---------- LLM modal ----------
-$('bPrompt').addEventListener('click', async () => {
-  const recs = await api('/api/llm');
-  $('mBody').innerHTML = recs.length ? recs.slice().reverse().map((r) => `
-    <h3>t = ${fmt(r.t, 0)} с · ${esc(r.trigger)}${r.fallback ? ' · <span class="warn">резервный план</span>' : ''}</h3>
-    <div class="meta">модель ${esc(r.model)} · план: ${esc((r.plan || []).join(' · '))}</div>
-    <div class="thought">«${esc(r.thought || '—')}»</div>
-    ${r.options && r.options.length ? '<div class="meta">варианты от алгоритма: ' + r.options.map((o) => `${o.id}: ${o.order.join('→')}→база (${o.samples} обр., расход ${fmt(o.cost, 2)})`).join('; ') + '</div>' : ''}
-    <details><summary>промпт, отправленный модели</summary><pre>${esc(r.prompt || '')}</pre></details>
-    ${(r.attempts || []).map((a, i) => `<details><summary>попытка ${i + 1}: ${fmt(a.latency, 1)} с, ${a.tokens ?? '—'} токенов${a.error ? ' — <span class="err">' + esc(a.error) + '</span>' : ''}</summary>
-      <div class="meta">ответ модели:</div><pre>${esc(a.content || '')}</pre><div class="meta">рассуждение модели (черновик):</div><pre>${esc(a.reasoning || '')}</pre></details>`).join('')}`).join('<hr style="border-color:#263647">') : '<p class="meta">Решений LLM пока нет — запустите режим «LLM».</p>';
-  $('modal').style.display = 'flex';
+// ---------- LLM dialog ----------
+$('promptBtn').addEventListener('click', async () => {
+  const recs = await api('/api/llm').catch(() => []);
+  $('modalBody').innerHTML = recs.length ? recs.slice().reverse().map((r) => `
+    <h4>t = ${fmt(r.t, 0)} с · ${esc(r.trigger)}${r.fallback ? ' · <span style="color:var(--warn)">резервный план</span>' : ''}</h4>
+    ${routeHtml(r.plan)}<blockquote>${esc(r.thought || '—')}</blockquote>
+    ${r.options && r.options.length ? '<div class="hint">Варианты от алгоритма: ' + r.options.map((o) => `${o.id}: ${o.order.join('→')}→база (${o.samples} обр., ${fmt(o.cost, 2)})`).join(' · ') + '</div>' : ''}
+    <details><summary>Промпт, отправленный модели</summary><pre>${esc(r.prompt || '')}</pre></details>
+    ${(r.attempts || []).map((a, i) => `<details><summary>Попытка ${i + 1}: ${fmt(a.latency, 1)} с, ${a.tokens ?? '—'} токенов${a.error ? ' — <span style="color:var(--bad)">' + esc(a.error) + '</span>' : ''}</summary>
+      <div class="hint">Ответ модели</div><pre>${esc(a.content || '')}</pre><div class="hint">Рассуждение модели</div><pre>${esc(a.reasoning || '')}</pre></details>`).join('')}`).join('') : '<p class="hint">Решений LLM пока нет.</p>';
+  $('modal').classList.add('open');
 });
-$('mClose').addEventListener('click', () => { $('modal').style.display = 'none'; });
-$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').style.display = 'none'; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('modal').style.display = 'none'; $('confirm').style.display = 'none'; } });
+$('modalClose').addEventListener('click', () => $('modal').classList.remove('open'));
+$('modal').addEventListener('click', (e) => { if (e.target === $('modal')) $('modal').classList.remove('open'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('modal').classList.remove('open'); $('confirm').style.display = 'none'; $('layersMenu').classList.remove('open'); } });
 
-// ---------- stream ----------
+// ---------- boot ----------
 function connect() {
   const es = new EventSource('/api/stream');
   es.onmessage = (m) => { S = JSON.parse(m.data); requestAnimationFrame(render); };
-  es.onerror = () => { pill('pSim', 'bad', 'нет связи с сервером панели'); };
+  es.onerror = () => setStatus('bad', 'Нет связи с сервером пульта');
 }
-window.addEventListener('resize', () => { layout(); drawMap(); drawChart(); });
+window.addEventListener('resize', () => { layout(); draw(); drawChart(); });
 (async () => {
-  try { await loadConfig(); await loadMap(); } catch (e) { toast('Сервер панели недоступен: ' + e.message, 'bad'); }
-  layout(); drawMap(); drawChart(); connect(); loadRuns();
+  applyTheme(theme);
+  try {
+    CFG = await api('/api/config');
+    $('fModel').innerHTML = CFG.models.map((m) => `<option>${esc(m)}</option>`).join('');
+    $('fMission').value = CFG.default_mission; updateForm();
+    await loadMap();
+  } catch (e) { toast('Сервер пульта недоступен: ' + e.message, 'bad'); }
+  layout(); draw(); drawChart(); connect(); loadRuns();
   setInterval(pollLog, 1000); setInterval(loadRuns, 15000);
 })();
 </script>
