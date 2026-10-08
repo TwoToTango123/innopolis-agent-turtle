@@ -71,6 +71,7 @@ python3 -m did_agent.core.offline_sim easy        # вся миссия без G
 ## Документы
 
 - [docs/DEFENSE.md](docs/DEFENSE.md) — резюме проекта для защиты
+- [docs/DID_Hack_IKA_Защита_прототипа.pptx](docs/DID_Hack_IKA_Защита_прототипа.pptx) — презентация защиты
 - [DEVLOG.md](DEVLOG.md) — журнал разработки с ассистентом: что, почему, какие грабли
 - [QUESTIONS.md](QUESTIONS.md) — неоднозначности задания и принятые временные решения
 - [TASK.md](TASK.md) — исходное задание
