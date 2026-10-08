@@ -14,15 +14,18 @@ import time
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Float32, String
 from std_srvs.srv import Trigger
+from visualization_msgs.msg import MarkerArray
 
 from did_agent.core.frames import Pose2D, odom_to_world, yaw_from_quaternion
 from did_agent.core.grid_map import GridMap
 from did_agent.core.judge import Judge, JudgeConfig
 from did_agent.core.scenario import resolve_scenario
+from did_agent.nodes import markers as mk
 
 
 def _share(*p):
@@ -68,6 +71,9 @@ class JudgeNode(Node):
         self.create_service(Trigger, '/did/collect', self._on_collect)
         self.create_service(Trigger, '/did/finish', self._on_finish)
         self.create_timer(1.0 / rate, self._tick)
+        # demo view of the hidden scenario (samples, zones) - the agent does not subscribe to it
+        self.pub_markers = self.create_publisher(MarkerArray, '/did_judge/markers', 1)
+        self.create_timer(1.0, self._publish_markers)
 
         sc = self.scenario
         self.get_logger().info(
@@ -101,6 +107,27 @@ class JudgeNode(Node):
         self.pub_sensor.publish(Float32(data=float(self.judge.sensor_reading())))
         self.pub_score.publish(String(data=json.dumps(self.judge.score())))
 
+    def _publish_markers(self):
+        st = self.get_clock().now().to_msg()
+        j, sc = self.judge, self.scenario
+        ms = [mk.delete_all(st)]
+        bx, by = sc.base
+        ms.append(mk.disc('base', 0, bx, by, j.cfg.base_radius, (0.1, 0.7, 0.3, 0.35), st))
+        ms.append(mk.text('base', 1, bx, by, 'BASE', (0.1, 0.9, 0.3, 1.0), st))
+        for i, z in enumerate(j.terrain):
+            if z.shape == 'circle':
+                ms.append(mk.disc('terrain', i, z.cx, z.cy, z.r, (0.95, 0.66, 0.0, 0.30), st))
+                ms.append(mk.text('terrain_label', i, z.cx, z.cy, f'{z.id} x{z.multiplier:g}', (1.0, 0.8, 0.2, 1.0), st))
+        for i, h in enumerate(j.hazards):
+            if h.shape == 'circle':
+                ms.append(mk.disc('hazard', i, h.cx, h.cy, h.r, (0.82, 0.29, 0.36, 0.40), st))
+                ms.append(mk.text('hazard_label', i, h.cx, h.cy, h.id, (1.0, 0.4, 0.4, 1.0), st))
+        for i, s in enumerate(sc.samples):
+            got = s.id in j.collected
+            ms.append(mk.sphere('samples', i, s.x, s.y, 0.12, (0.5, 0.5, 0.5, 0.6) if got else (1.0, 0.85, 0.1, 1.0), st))
+            ms.append(mk.text('sample_label', i, s.x, s.y, s.id + (' ✓' if got else ''), (1, 1, 1, 1), st, size=0.1))
+        self.pub_markers.publish(MarkerArray(markers=ms))
+
     def _publish_event(self, e: dict):
         self.pub_events.publish(String(data=json.dumps(e)))
         self.get_logger().info(f'event: {e}')
@@ -131,7 +158,7 @@ class JudgeNode(Node):
         path = os.path.join(self.log_dir, time.strftime('%Y%m%d-%H%M%S') + f'_judge_{self.scenario.name}.json')
         with open(path, 'w') as f:
             json.dump({'scenario': self.scenario.to_dict(), 'score': self.judge.score(),
-                       'log': self.judge.log}, f, indent=1)
+                       'log': self.judge.log, 'trajectory': self.judge.trajectory}, f, indent=1)
         self.get_logger().info(f'judge log saved to {path}')
 
 
@@ -140,7 +167,7 @@ def main():
     node = JudgeNode()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         node.save_log()

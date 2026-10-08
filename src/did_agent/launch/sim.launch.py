@@ -8,6 +8,7 @@ and RViz (map + robot + scan) for watching.
 The Gazebo GUI (Ogre2) renders garbage on Intel Arc under WSLg, see DEVLOG.
 """
 import os
+import subprocess
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -23,7 +24,17 @@ os.environ.setdefault('TURTLEBOT3_MODEL', 'burger')
 START_X, START_Y = '-2.0', '-0.5'   # TASK.md: spawn point in world (= map) frame
 
 
+def refuse_if_running():
+    """Two Gazebo servers share the same gz-transport topics and break each other."""
+    r = subprocess.run(['pgrep', '-f', 'gz sim -r -s'], capture_output=True, text=True)
+    if r.stdout.strip():
+        raise RuntimeError(
+            f'Gazebo simulation is already running (pid {r.stdout.split()[0]}). '
+            'Stop it first: ~/innopolis_proj/scripts/stop_sim.sh')
+
+
 def generate_launch_description():
+    refuse_if_running()
     tb3_launch = os.path.join(get_package_share_directory('turtlebot3_gazebo'), 'launch')
     ros_gz_sim = get_package_share_directory('ros_gz_sim')
     pkg = get_package_share_directory('did_agent')
@@ -63,7 +74,11 @@ def generate_launch_description():
         Node(package='nav2_lifecycle_manager', executable='lifecycle_manager', name='lifecycle_manager_map',
              parameters=[sim_time, {'autostart': True, 'node_names': ['map_server']}]),
 
+        # Software GL for RViz: on WSLg + Intel Arc the d3d12 driver fails to link RViz's map shader,
+        # segfaults RViz and resets the GPU device (black screen). llvmpipe is plenty for a 2D view.
+        DeclareLaunchArgument('rviz_software', default_value='true', description='Render RViz with llvmpipe'),
         Node(package='rviz2', executable='rviz2', name='rviz2', output='log',
              arguments=['-d', os.path.join(pkg, 'rviz', 'did.rviz')],
+             additional_env={'LIBGL_ALWAYS_SOFTWARE': LaunchConfiguration('rviz_software')},
              parameters=[sim_time], condition=IfCondition(rviz)),
     ])
