@@ -46,8 +46,11 @@ class JudgeNode(Node):
 
         grid = GridMap.from_yaml(map_yaml)
         self.scenario = resolve_scenario(scenario, seed, grid, _share('scenarios'))
-        self.judge = Judge(self.scenario, JudgeConfig.load(config), grid,
-                           seed=None if seed < 0 else seed)
+        cfg = JudgeConfig.load(config)
+        battery = p('battery', 0.0).value          # > 0 overrides the starting charge (demo of tight budgets)
+        if battery > 0:
+            cfg.battery.initial = float(battery)
+        self.judge = Judge(self.scenario, cfg, grid, seed=None if seed < 0 else seed)
         self.t0 = None
         self._odom_pose = None
 

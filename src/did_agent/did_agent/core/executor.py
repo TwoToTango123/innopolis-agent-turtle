@@ -98,6 +98,7 @@ class MissionExecutor:
                 self._finish_subgoal(s, False, 'preempted by a new goal')
         if self.current is None:
             s.events, self._pending_events = self._pending_events, []
+            s.drain_per_meter = self.drain_per_meter
             s.return_cost = self.return_cost(s.x, s.y)
             self.current = self.planner.next_subgoal(s)
             if self.current is None:

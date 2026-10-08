@@ -30,6 +30,8 @@ from did_agent.core.costmap import CostMap
 from did_agent.core.executor import MissionExecutor
 from did_agent.core.frames import START_X, START_Y, Pose2D, odom_to_world, yaw_from_quaternion
 from did_agent.core.grid_map import GridMap
+from did_agent.core.llm_client import LLMClient, LLMError
+from did_agent.core.llm_planner import DEFAULT_MISSION, LLMPlanner, Target
 from did_agent.core.localization import DeadReckoning, map_to_odom
 from did_agent.core.mission import AgentState, GoalQueuePlanner, ScriptedPlanner, parse_targets
 from did_agent.core.navigator import Navigator
@@ -81,6 +83,8 @@ class AgentNode(Node):
         self.pub_cmd = self.create_publisher(TwistStamped, '/cmd_vel', 10)
         self.pub_path = self.create_publisher(Path, '/did_agent/path', 1)
         self.pub_journal = self.create_publisher(String, '/did_agent/journal', 10)
+        self.pub_llm = self.create_publisher(String, '/did_agent/llm', 10)
+        self._llm_len = 0
         self.cli = {'collect': self.create_client(Trigger, '/did/collect'),
                     'finish': self.create_client(Trigger, '/did/finish')}
         self.create_timer(1.0 / self.rate, self._tick)
@@ -111,6 +115,22 @@ class AgentNode(Node):
             if not targets:
                 raise ValueError('scripted planner needs `targets` or `targets_from_scenario`')
             return ScriptedPlanner(targets)
+        if kind == 'llm':
+            # level 2: the LLM chooses which targets and in what order; geometry comes from A*
+            from_sc = p('targets_from_scenario', '').value
+            if not from_sc:
+                raise ValueError('llm planner needs `targets_from_scenario` (level-2 demo: candidate targets)')
+            sc = resolve_scenario(from_sc, p('seed', -1).value, grid, _share('scenarios'))
+            targets = [Target(s.id, s.x, s.y) for s in sc.samples]
+            model = p('llm_model', 'deepseek-v4.1-flash').value
+            try:
+                client = LLMClient(model, env_file=p('llm_env_file', os.path.join(os.getcwd(), '.env')).value)
+            except LLMError as e:
+                self.get_logger().error(f'LLM unavailable ({e}); the planner will use its greedy fallback')
+                client = None
+            self.get_logger().info(f'LLM planner: model {model}, {len(targets)} candidate targets from {sc.name}')
+            return LLMPlanner(client, targets, self.base, self.nav.path_cost,
+                              mission=p('mission', DEFAULT_MISSION).value)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
             return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value)
@@ -163,6 +183,19 @@ class AgentNode(Node):
             ms.append(mk.text('route_label', i, x, y, str(i + 1), (1, 1, 1, 1), st, size=0.12))
         if len(route) > 1:
             ms.append(mk.line('route_line', 0, route, 0.015, (0.0, 0.8, 1.0, 0.5), st))
+        if isinstance(planner, LLMPlanner):
+            # RViz's marker font has no Cyrillic: show the plan in ASCII, the Russian thought goes to the log
+            if planner.thinking:
+                caption = 'LLM is thinking...'
+            elif planner.journal:
+                rec = planner.journal[-1]
+                order = [s.split()[1] for s in rec.get('plan', []) if s.startswith('goto ')]
+                caption = ('FALLBACK: ' if rec.get('fallback') else 'LLM: ') + '>'.join(order + ['base']) + \
+                    f'\nforecast {rec.get("predicted_battery")}'
+            else:
+                caption = ''
+            if caption:
+                ms.append(mk.text('llm_plan', 0, 0.0, 2.35, caption, (1.0, 1.0, 0.6, 1.0), st, size=0.12, z=0.3))
         self.pub_markers.publish(MarkerArray(markers=ms))
 
     # ---- inputs ---------------------------------------------------------------
@@ -275,6 +308,19 @@ class AgentNode(Node):
             self._journal_len += 1
             self.pub_journal.publish(String(data=json.dumps(entry)))
             self.get_logger().info(f'subgoal: {entry}')
+        llm_journal = getattr(self.mission.planner, 'journal', None)
+        while llm_journal is not None and self._llm_len < len(llm_journal):
+            rec = llm_journal[self._llm_len]
+            self._llm_len += 1
+            self.pub_llm.publish(String(data=json.dumps(rec, ensure_ascii=False)))
+            tries = len(rec.get('attempts', []))
+            lat = sum(a.get('latency', 0) for a in rec.get('attempts', []))
+            self.get_logger().info(
+                f'LLM [{rec.get("trigger")}] {"FALLBACK " if rec.get("fallback") else ""}plan={rec.get("plan")} '
+                f'(attempts {tries}, {lat:.1f}s, battery forecast {rec.get("predicted_battery")}) — {rec.get("thought")}')
+            for a in rec.get('attempts', []):
+                if a.get('error'):
+                    self.get_logger().warn(f'LLM answer rejected: {a["error"]}')
 
     def _save(self):
         if not self.log_dir:
@@ -283,7 +329,9 @@ class AgentNode(Node):
         path = os.path.join(self.log_dir, time.strftime('%Y%m%d-%H%M%S') + '_agent.json')
         with open(path, 'w') as f:
             json.dump({'journal': self.mission.journal, 'planner_log': getattr(self.mission.planner, 'log', []),
-                       'drain_per_meter': self.mission.drain_per_meter, 'score': self.score}, f, indent=1)
+                       'llm_journal': getattr(self.mission.planner, 'journal', []),
+                       'drain_per_meter': self.mission.drain_per_meter, 'score': self.score},
+                      f, indent=1, ensure_ascii=False)
         self.get_logger().info(f'agent journal saved to {path}')
 
     def stop_robot(self):

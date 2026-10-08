@@ -15,6 +15,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -24,7 +25,9 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='easy', description='easy | medium | hard | path/to/scenario.yaml'),
         DeclareLaunchArgument('seed', default_value='-1', description='>= 0: generate the scenario from this seed'),
         DeclareLaunchArgument('agent', default_value='true', description='Start the agent'),
-        DeclareLaunchArgument('planner', default_value='scripted', description='scripted: drive the scenario mission | manual: goals/route from RViz'),
+        DeclareLaunchArgument('planner', default_value='scripted', description='scripted: fixed mission order | llm: LLM chooses targets and order | manual: goals/route from RViz'),
+        DeclareLaunchArgument('llm_model', default_value='deepseek-v4.1-flash', description='model on ai.mai.ru (key in .env)'),
+        DeclareLaunchArgument('battery', default_value='0.0', description='> 0: starting battery instead of 60 (tight-budget demo)'),
         DeclareLaunchArgument('gui', default_value='false', description='Gazebo GUI'),
         DeclareLaunchArgument('rviz', default_value='true', description='RViz'),
         DeclareLaunchArgument('log_dir', default_value=os.path.join(os.getcwd(), 'runs')),
@@ -40,6 +43,7 @@ def generate_launch_description():
              parameters=[{'use_sim_time': True,
                           'scenario': arg('scenario'),
                           'seed': arg('seed'),
+                          'battery': ParameterValue(arg('battery'), value_type=float),
                           'log_dir': arg('log_dir')}]),
 
         Node(package='did_agent', executable='agent', name='did_agent', output='screen',
@@ -48,6 +52,8 @@ def generate_launch_description():
                           'planner': arg('planner'),
                           # level-1 demo: drive to the scenario's sample coordinates
                           'targets_from_scenario': arg('scenario'),
+                          'llm_model': arg('llm_model'),
+                          'llm_env_file': os.path.join(os.getcwd(), '.env'),
                           'seed': arg('seed'),
                           'log_dir': arg('log_dir')}]),
     ])

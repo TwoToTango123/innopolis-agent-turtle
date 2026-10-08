@@ -83,14 +83,35 @@ def main(argv=None):
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ap = argparse.ArgumentParser()
     ap.add_argument('scenario', help='easy | medium | hard | path.yaml')
+    ap.add_argument('--planner', choices=['scripted', 'llm'], default='scripted')
+    ap.add_argument('--battery', type=float, default=0.0, help='> 0: starting battery instead of 60')
+    ap.add_argument('--model', default='deepseek-v4.1-flash')
+    ap.add_argument('--env', default=os.path.expanduser('~/innopolis_proj/.env'), help='file with MAI_API_KEY')
     args = ap.parse_args(argv)
     path = args.scenario if args.scenario.endswith('.yaml') else os.path.join(here, 'scenarios', args.scenario + '.yaml')
     sc = Scenario.load(path)
     grid = GridMap.from_yaml(os.path.join(here, 'maps', 'map.yaml'))
-    judge = Judge(sc, JudgeConfig.load(os.path.join(here, 'config', 'judge.yaml')), grid, seed=0)
-    res = run_mission(grid, judge, ScriptedPlanner([(s.x, s.y) for s in sc.samples]))
+    cfg = JudgeConfig.load(os.path.join(here, 'config', 'judge.yaml'))
+    if args.battery > 0:
+        cfg.battery.initial = args.battery
+    judge = Judge(sc, cfg, grid, seed=0)
+    cm = CostMap(grid, inflation_radius=0.2)
+    if args.planner == 'llm':
+        from .llm_client import LLMClient
+        from .llm_planner import LLMPlanner, Target
+        planner = LLMPlanner(LLMClient(args.model, env_file=args.env), [Target(s.id, s.x, s.y) for s in sc.samples],
+                             sc.base, Navigator(cm).path_cost, async_mode=False)
+    else:
+        planner = ScriptedPlanner([(s.x, s.y) for s in sc.samples])
+    res = run_mission(grid, judge, planner, cm=cm)
+    for rec in getattr(planner, 'journal', []):
+        print(f'\nLLM [{rec["trigger"]}] {"FALLBACK " if rec.get("fallback") else ""}{rec.get("plan")}  forecast {rec.get("predicted_battery")}')
+        for a in rec['attempts']:
+            print(f'   attempt: {a.get("latency")}s, {a.get("tokens")} tokens' + (f', REJECTED: {a["error"]}' if a.get('error') else ''))
+        print('   thought:', rec.get('thought'))
+    print()
     for j in res.journal:
-        print(j)
+        print({k: j[k] for k in ('t', 'kind', 'target', 'success', 'message', 'battery_used', 'battery')})
     print('events:', res.events)
     print('score:', res.score, f'sim time {res.sim_time:.1f}s')
 

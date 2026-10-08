@@ -50,6 +50,7 @@ class AgentState:
     score: dict = field(default_factory=dict)
     events: list[dict] = field(default_factory=list)      # judge events since the last call
     return_cost: float | None = None                      # planned battery to get home from here
+    drain_per_meter: float = 1.0                          # measured by the executor
 
 
 class Planner(Protocol):

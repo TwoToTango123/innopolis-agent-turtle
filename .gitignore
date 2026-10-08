@@ -12,3 +12,6 @@ __pycache__/
 
 # runtime output
 runs/
+
+# secrets (LLM API key)
+.env
