@@ -100,6 +100,55 @@ class ScriptedPlanner:
             self.queue = [Subgoal('return', reason='battery reserve'), Subgoal('finish', reason='back at base')]
 
 
+class GoalQueuePlanner:
+    """Operator mode: goals come from outside (RViz "2D Goal Pose" / "Publish Point").
+
+    set_goal()  - go to this point now (replaces the queue, preempts the current trip)
+    add_point() - append a point to the route
+    A goal at the base means "return and finish the run".
+    `persistent`: the executor waits for new goals instead of ending the mission.
+    """
+    persistent = True
+
+    def __init__(self, base: tuple[float, float], collect_at_goals: bool = False, base_radius: float = 0.3):
+        self.base = base
+        self.collect_at_goals = collect_at_goals
+        self.base_radius = base_radius
+        self.queue: list[Subgoal] = []
+        self.log: list[str] = []
+        self.version = 0          # bumped on set_goal: the executor preempts the current subgoal
+        self.route_points = 0
+
+    def _goal_subgoals(self, x: float, y: float, reason: str) -> list[Subgoal]:
+        if distance((x, y), self.base) <= self.base_radius:
+            return [Subgoal('return', reason=f'{reason}: back to base'), Subgoal('finish', reason='operator sent the robot home')]
+        out = [Subgoal('goto', (x, y), reason=reason)]
+        if self.collect_at_goals:
+            out.append(Subgoal('collect', reason=f'{reason}: try to collect'))
+        return out
+
+    def set_goal(self, x: float, y: float) -> None:
+        self.queue = self._goal_subgoals(x, y, f'operator goal ({x:.2f}, {y:.2f})')
+        self.version += 1
+        self.log.append(f'new goal ({x:.2f}, {y:.2f})')
+
+    def add_point(self, x: float, y: float) -> None:
+        self.route_points += 1
+        self.queue += self._goal_subgoals(x, y, f'route point {self.route_points} ({x:.2f}, {y:.2f})')
+        self.log.append(f'route point ({x:.2f}, {y:.2f}), queue {len(self.queue)}')
+
+    def pending_targets(self) -> list[tuple[float, float]]:
+        return [s.target if s.kind == 'goto' else self.base for s in self.queue if s.kind in ('goto', 'return')]
+
+    def next_subgoal(self, state: AgentState) -> Subgoal | None:
+        return self.queue.pop(0) if self.queue else None
+
+    def on_result(self, result: SubgoalResult, state: AgentState) -> None:
+        self.log.append(f't={state.t:.1f}: {result.subgoal.kind} -> {"ok" if result.success else "FAIL"} {result.message}')
+        if result.subgoal.kind == 'goto' and not result.success and self.queue and self.queue[0].kind == 'collect':
+            self.queue.pop(0)
+
+
 def parse_targets(text: str) -> list[tuple[float, float]]:
     """'x1,y1; x2,y2' -> [(x1, y1), (x2, y2)]"""
     out = []

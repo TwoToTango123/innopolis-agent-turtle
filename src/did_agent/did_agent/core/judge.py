@@ -81,6 +81,7 @@ class Judge:
         self._in_contact = False
         self._in_hazard: set[str] = set()
         self.log: list[dict] = []            # private: includes hidden env changes
+        self.trajectory: list[tuple[float, float, float]] = []   # ground truth (t, x, y), every 0.5 s
         res = grid.resolution
         self._contact = dilate(grid.occ != FREE, (cfg.robot_radius + cfg.collision_margin) / res)
 
@@ -142,6 +143,8 @@ class Judge:
         prev, self.pose = self.pose, (x, y, yaw)
         dt = t - self.t if prev is not None else 0.0
         self.t = t
+        if not self.trajectory or t - self.trajectory[-1][0] >= 0.5:
+            self.trajectory.append((round(t, 2), round(x, 3), round(y, 3)))
         if self.state != 'running':
             return out
         while self.pending and self.pending[0].t <= t:

@@ -40,6 +40,7 @@ class MissionExecutor:
         self._last_xy = None
         self._last_battery = None
         self._pending_events: list[dict] = []
+        self._planner_version = getattr(planner, 'version', None)
 
     # ---- bookkeeping --------------------------------------------------------
     def _track(self, s: AgentState) -> None:
@@ -88,13 +89,21 @@ class MissionExecutor:
         if self.state == self.WAITING:
             return Command()
         self.state = self.RUNNING
+        # operator planners can replace the plan at any time: preempt the current trip
+        version = getattr(self.planner, 'version', None)
+        if version != self._planner_version:
+            self._planner_version = version
+            if self.current is not None and self.current.kind in ('goto', 'explore', 'return'):
+                self.nav.cancel()
+                self._finish_subgoal(s, False, 'preempted by a new goal')
         if self.current is None:
             s.events, self._pending_events = self._pending_events, []
             s.return_cost = self.return_cost(s.x, s.y)
             self.current = self.planner.next_subgoal(s)
             if self.current is None:
-                self.state = self.DONE
-                return Command()
+                if not getattr(self.planner, 'persistent', False):
+                    self.state = self.DONE
+                return Command()     # persistent planner: idle until a new goal arrives
             self._sg_start = (s.t, s.battery, self._dist)
             sg = self.current
             if sg.kind in ('goto', 'explore', 'return'):
@@ -118,7 +127,9 @@ class MissionExecutor:
         return Command(v, w)
 
     def service_result(self, success: bool, message: str, s: AgentState) -> None:
-        kind = self.current.kind if self.current else None
+        if self.current is None:      # preempted while the call was in flight
+            return
+        kind = self.current.kind
         self._finish_subgoal(s, success, message)
         if kind == 'finish':
             self.state = self.DONE
