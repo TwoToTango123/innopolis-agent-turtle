@@ -8,7 +8,7 @@
 - возвращается на базу вовремя.
 
 LLM (DeepSeek через ai.mai.ru) — научный руководитель: по журналу выбирает, где искать дальше и когда домой.
-Результаты экспериментов — в [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), подготовка к финалу — в [docs/FINAL.md](docs/FINAL.md).
+Устройство системы — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), эксперименты и гипотезы — [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md).
 Судья и генератор сценариев (образцы, «дорогие» грунты, опасные зоны, скрытые события) написаны нами по интерфейсу из [TASK.md](TASK.md).
 
 ![Пульт: научный агент, hard, 7 из 7](docs/img/control_panel_science.png)
@@ -83,6 +83,7 @@ MAI_BASE_URL=https://api-ai.mai.ru/v1
 
 Карта арены и запретная зона 0,2 м вокруг препятствий · робот, лидар, след одометрии · голубая линия — путь A* ·
 пронумерованные точки маршрута · «вид судьи» (скрыт от агента): образцы (жёлтые → серые после сбора), зоны грунта с множителем, опасные зоны, база.
+В режиме `science` — знания агента: неисследованная область, найденные дорогие участки и опасные зоны, текущая оценка положения образца.
 
 ## Архитектура
 
@@ -91,7 +92,7 @@ MAI_BASE_URL=https://api-ai.mai.ru/v1
  /odom /imu ─┤ DeadReckoning (путь — одометрия, курс — IMU) → поза в мире, TF map→odom│
  /scan      ─┤                                                                       │
  /did/*     ─┤ Planner ──подцели──► MissionExecutor ──► Navigator ──► /cmd_vel       │
- RViz goals ─┤ scripted|llm|manual (бюджет батареи)    A* + follower  (TwistStamped) │
+ RViz goals ─┤ science|llm|scripted|manual (бюджет)    A* + follower  (TwistStamped) │
              └──────────────────────────────┬────────────────────────────────────────┘
                                   /did/collect, /did/finish
              ┌──────────────── did_judge (ROS-узел) ─────────────────────────────────┐
@@ -101,7 +102,7 @@ MAI_BASE_URL=https://api-ai.mai.ru/v1
 ```
 
 Вся логика — в `src/did_agent/did_agent/core/` на чистом Python (numpy + pyyaml), без ROS: её можно разрабатывать и тестировать на Windows.
-Узлы в `nodes/` только переводят сообщения ROS в вызовы core. Подробно — [docs/DEFENSE.md](docs/DEFENSE.md).
+Узлы в `nodes/` только переводят сообщения ROS в вызовы core. Подробно — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Тесты и офлайн-симулятор
 
@@ -113,13 +114,10 @@ python3 ../../scripts/science_batch.py --knowledge --seeds 30 --battery 25   # �
 
 ## Документы
 
-- [docs/FINAL.md](docs/FINAL.md) — **финал**: как работает научный агент, питч по слайдам, демо, ответы на вопросы
-- [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) — гипотезы H1–H3, методика, таблицы, статистика
-- [docs/DID_Hack_IKA_Финал.pptx](docs/DID_Hack_IKA_Финал.pptx) — финальная презентация
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — как устроен агент: навигация, судья, научный цикл, адаптация, LLM, решения
+- [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) — гипотезы, методика, таблицы, статистика, прогоны в Gazebo
+- [docs/DID_Hack_IKA_Финал.pptx](docs/DID_Hack_IKA_Финал.pptx) — презентация
+- [DEVLOG.md](DEVLOG.md) — журнал разработки с coding-ассистентом: что, почему, какие грабли
 - [.claude/skills](.claude/skills) — наши скиллы для coding-ассистента: прогон в Gazebo с доказательством, эксперимент, безопасный коммит
-- [docs/DEFENSE.md](docs/DEFENSE.md) — резюме проекта к промежуточной защите (уровни 0–2)
-- [docs/SPEECH.md](docs/SPEECH.md) — текст выступления по слайдам, ответы на требования, статус гипотез
-- [docs/DID_Hack_IKA_Защита_прототипа.pptx](docs/DID_Hack_IKA_Защита_прототипа.pptx) — презентация защиты
-- [DEVLOG.md](DEVLOG.md) — журнал разработки с ассистентом: что, почему, какие грабли
 - [QUESTIONS.md](QUESTIONS.md) — неоднозначности задания и принятые временные решения
 - [TASK.md](TASK.md) — исходное задание
