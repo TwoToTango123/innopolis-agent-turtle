@@ -34,7 +34,7 @@ from did_agent.core.grid_map import OCCUPIED, GridMap
 from did_agent.core.llm_planner import DEFAULT_MISSION
 
 MODELS = ['deepseek-v4.1-flash', 'DeepSeek-V4-Flash', 'qwen3.8-flash-next', 'qwen3.6-35b-a3b', 'qwen3.8-27b', 'Qwen3.5-122B-A10B']
-PLANNERS = ('llm', 'manual', 'scripted')
+PLANNERS = ('science', 'llm', 'manual', 'scripted')
 ANSI = re.compile(r'\x1b\[[0-9;]*m')
 LAUNCH_TS = re.compile(r'\[\d{10}\.\d+\] ')
 
@@ -57,6 +57,7 @@ class Bridge(Node):
         self.create_subscription(String, '/did_judge/view', self._view, 2)
         self.create_subscription(String, '/did_agent/llm', self._llm, 10)
         self.create_subscription(String, '/did_agent/journal', self._journal, 50)
+        self.create_subscription(String, '/did_agent/lab', self._lab, reliable)
         self.pub_goal = self.create_publisher(PoseStamped, '/goal_pose', 10)
         self.pub_point = self.create_publisher(PointStamped, '/clicked_point', 10)
         self.pub_cancel = self.create_publisher(Empty, '/did_agent/cancel', 10)
@@ -72,6 +73,8 @@ class Bridge(Node):
             self.events = collections.deque(maxlen=60)
             self.journal = collections.deque(maxlen=60)
             self.llm = collections.deque(maxlen=20)
+            self.lab = collections.deque(maxlen=300)
+            self.science = None
             self.battery_hist = []
             self.last_msg = 0.0
 
@@ -92,6 +95,8 @@ class Bridge(Node):
                 self.events.clear()
                 self.journal.clear()
                 self.llm.clear()
+                self.lab.clear()
+                self.science = None
             if not self.battery_hist or t - self.battery_hist[-1][0] >= 0.5:
                 self.battery_hist.append([round(t, 1), round(s.get('battery', 0.0), 3)])
                 if len(self.battery_hist) > 1200:      # keep the whole run: thin out instead of dropping the start
@@ -106,7 +111,13 @@ class Bridge(Node):
     def _state(self, m):
         with self.lock:
             self.agent = json.loads(m.data)
+            if 'science' in self.agent:              # sent once a second: keep the last one
+                self.science = self.agent.pop('science')
             self._touch()
+
+    def _lab(self, m):
+        with self.lock:
+            self.lab.append(json.loads(m.data))
 
     def _view(self, m):
         with self.lock:
@@ -153,7 +164,7 @@ class Bridge(Node):
                    for r in self.llm]
             return {'live': time.time() - self.last_msg < 3.0, 'battery': self.battery, 'score': self.score,
                     'agent': self.agent, 'view': self.view, 'events': list(self.events), 'journal': list(self.journal),
-                    'llm': llm, 'battery_hist': self.battery_hist}
+                    'llm': llm, 'battery_hist': self.battery_hist, 'lab': list(self.lab), 'science': self.science}
 
     def llm_full(self) -> list:
         with self.lock:
@@ -285,7 +296,7 @@ def make_handler(bridge: Bridge, sim: Sim, root: str, static_dir: str, mapdata: 
         scenario = str(b.get('scenario', 'medium'))
         if scenario not in ('easy', 'medium', 'hard') and not (scenario.endswith('.yaml') and os.path.exists(os.path.expanduser(scenario))):
             raise ValueError('неизвестный сценарий')
-        planner = str(b.get('planner', 'llm'))
+        planner = str(b.get('planner', 'science'))
         if planner not in PLANNERS:
             raise ValueError('неизвестный режим')
         battery = float(b.get('battery') or 0)

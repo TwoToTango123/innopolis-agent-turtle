@@ -18,7 +18,7 @@
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.06);
   --map-bg: #f1f1f3; --map-free: #ffffff; --map-margin: #fbe3e6; --map-obstacle: #3f3f46; --map-unknown: #e4e4e7;
   --m-path: #0284c7; --m-robot: #0284c7; --m-scan: #ef4444; --m-sample: #eab308; --m-sample-done: #a1a1aa;
-  --m-terrain: 217,119,6; --m-hazard: 220,38,38; --m-base: 22,163,74; --m-trail: 217,119,6; --m-halo: rgba(255,255,255,.9); --m-label: #27272a;
+  --m-know: 124,58,237; --m-terrain: 217,119,6; --m-hazard: 220,38,38; --m-base: 22,163,74; --m-trail: 217,119,6; --m-halo: rgba(255,255,255,.9); --m-label: #27272a;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -30,7 +30,7 @@
   --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
   --map-bg: #0c0d0f; --map-free: #1a1d22; --map-margin: #3b1d25; --map-obstacle: #d4d4d8; --map-unknown: #0f1013;
   --m-path: #38bdf8; --m-robot: #38bdf8; --m-scan: #f87171; --m-sample: #facc15; --m-sample-done: #71717a;
-  --m-terrain: 245,158,11; --m-hazard: 248,113,113; --m-base: 34,197,94; --m-trail: 245,158,11; --m-halo: rgba(12,13,15,.85); --m-label: #e4e4e7;
+  --m-know: 167,139,250; --m-terrain: 245,158,11; --m-hazard: 248,113,113; --m-base: 34,197,94; --m-trail: 245,158,11; --m-halo: rgba(12,13,15,.85); --m-label: #e4e4e7;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -190,6 +190,14 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
 .feed .ic.warn { background: var(--warn-soft); color: var(--warn); } .feed .ic.info { background: var(--surface-2); color: var(--text-2); }
 .feed .t { color: var(--muted); font-size: 12px; }
 .feed .sub { color: var(--muted); font-size: 12px; }
+.hyp { width: 100%; font-size: 12.5px; margin-bottom: 12px; table-layout: fixed; }
+.hyp td { padding: 6px 4px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; white-space: normal; }
+.hyp td:nth-child(1) { width: 30px; } .hyp td:nth-child(3) { width: 104px; text-align: right; }
+.lab .item div { overflow-wrap: anywhere; }
+.hyp td:first-child { font-weight: 600; white-space: nowrap; color: rgb(var(--m-know)); }
+.lab .item { padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.lab .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-right: 6px; }
+.lab .k.гипотеза { color: rgb(var(--m-know)); } .lab .k.вывод { color: var(--ok); } .lab .k.адаптация { color: var(--warn); } .lab .k.решение { color: var(--accent); }
 
 /* ---------- modal & toasts ---------- */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
@@ -255,7 +263,8 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
       </div>
       <div class="field"><span>Кто планирует</span>
         <div class="radio" id="plannerRadio">
-          <label class="on"><input type="radio" name="planner" value="llm" checked><div><b>LLM</b><small>модель выбирает цели, порядок и момент возврата</small></div></label>
+          <label class="on"><input type="radio" name="planner" value="science" checked><div><b>Научный агент</b><small>ищет образцы по датчику, учит цену грунтов, ведёт журнал гипотез</small></div></label>
+          <label><input type="radio" name="planner" value="llm"><div><b>LLM</b><small>модель выбирает цели, порядок и момент возврата</small></div></label>
           <label><input type="radio" name="planner" value="manual"><div><b>Оператор</b><small>цели и маршрут кликом по карте</small></div></label>
           <label><input type="radio" name="planner" value="scripted"><div><b>Фиксированный порядок</b><small>базовая линия для сравнения</small></div></label>
         </div>
@@ -305,6 +314,7 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
           <button class="btn sm" id="layersBtn"><svg class="i"><use href="#i-layers"/></svg>Слои<svg class="i"><use href="#i-down"/></svg></button>
           <div class="menu" id="layersMenu">
             <label class="toggle">Лидар <input type="checkbox" id="lScan" checked></label>
+            <label class="toggle">Знания агента (разведка, зоны) <input type="checkbox" id="lSci" checked></label>
             <label class="toggle">Вид судьи (образцы, зоны) <input type="checkbox" id="lJudge" checked></label>
             <label class="toggle">След робота <input type="checkbox" id="lTrail" checked></label>
             <label class="toggle">Запретная зона 0,2 м <input type="checkbox" id="lMargin" checked></label>
@@ -315,7 +325,7 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
       <div class="floating br panel legend">
         <span><i style="background:var(--m-robot)"></i>робот, путь</span><span><i style="background:var(--m-scan)"></i>лидар</span>
         <span><i style="background:var(--m-sample)"></i>образец</span><span><i style="background:rgba(var(--m-terrain),.5)"></i>дорогой грунт</span>
-        <span><i style="background:rgba(var(--m-hazard),.5)"></i>опасная зона</span><span><i style="background:rgba(var(--m-base),.5)"></i>база</span>
+        <span><i style="background:rgba(var(--m-hazard),.5)"></i>опасная зона</span><span><i style="background:rgba(var(--m-base),.5)"></i>база</span><span><i style="background:rgba(var(--m-know),.6)"></i>знания агента</span>
       </div>
       <div class="empty" id="empty"><div class="card"><b>Симуляция не запущена</b><p>Выберите миссию слева и запустите — Gazebo, судья и агент поднимутся за 10–15 секунд.</p><button class="btn accent" id="emptyStart"><svg class="i"><use href="#i-play"/></svg>Запустить</button></div></div>
       <div id="tip"></div>
@@ -351,10 +361,15 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
       <div class="ctip" id="ctip"></div>
     </div>
     <div class="tabs rtabs">
-      <button class="tab on" data-r="llmPane">LLM</button>
+      <button class="tab on" data-r="labPane">Журнал <span class="count" id="labCount">0</span></button>
+      <button class="tab" data-r="llmPane">LLM</button>
       <button class="tab" data-r="feedPane">События <span class="count" id="feedCount">0</span></button>
     </div>
-    <div class="rpane on" id="llmPane">
+    <div class="rpane on" id="labPane">
+      <div id="labHyp"><p class="hint">Журнал эксперимента появится в режиме «Научный агент»: гипотезы, проверки, выводы.</p></div>
+      <div class="lab" id="labLog"></div>
+    </div>
+    <div class="rpane" id="llmPane">
       <div class="llm-status" id="llmStatus"><span class="hint">Решений пока нет. Запустите миссию в режиме LLM.</span></div>
       <div id="llmLast"></div>
       <div class="history" id="llmHistory" style="display:none"></div>
@@ -374,8 +389,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const fmt = (v, d = 1) => (v === null || v === undefined || Number.isNaN(Number(v))) ? '—' : Number(v).toFixed(d).replace('.', ',');
 const icon = (name) => `<svg class="i"><use href="#i-${name}"/></svg>`;
 const SENSOR_THR = 0.6;
-const PLANNER_NAME = { llm: 'LLM', manual: 'Оператор', scripted: 'Фиксированный порядок' };
-let S = null, CFG = null, MAP = null, clickMode = 'goal', pendingClick = null, logNext = 0, lastState = '', form = { scenario: 'medium', planner: 'llm' };
+const PLANNER_NAME = { science: 'Научный агент', llm: 'LLM', manual: 'Оператор', scripted: 'Фиксированный порядок' };
+let S = null, CFG = null, MAP = null, clickMode = 'goal', pendingClick = null, logNext = 0, lastState = '', form = { scenario: 'medium', planner: 'science' };
 
 // ---------- theme ----------
 function applyTheme(t) {
@@ -524,6 +539,20 @@ function draw() {
     (v.terrain || []).forEach((z) => { circle(z.cx, z.cy, z.r, rgba('--m-terrain', .16), rgba('--m-terrain', .75), 1.2); text(z.cx, z.cy, `${z.id} ×${String(z.multiplier).replace('.', ',')}`, rgba('--m-terrain', 1), 11.5); });
     (v.hazards || []).forEach((h) => { circle(h.cx, h.cy, h.r, rgba('--m-hazard', .18), rgba('--m-hazard', .8), 1.2); text(h.cx, h.cy, h.id, rgba('--m-hazard', 1), 11.5); });
   }
+  const sci = S && S.science;
+  if (sci && $('lSci').checked) {
+    ctx.fillStyle = rgba('--m-know', .22); const d = Math.max(2, 0.07 * T.s);
+    (sci.unexplored || []).forEach((p) => { const [cx, cy] = W2C(p[0], p[1]); ctx.fillRect(cx - d / 2, cy - d / 2, d, d); });
+    (sci.zones || []).forEach((z) => {
+      const c = sci.cell, al = z.status === 'опровергнута' ? .08 : z.status === 'изменилась' ? .5 : .32;
+      ctx.fillStyle = rgba('--m-terrain', al);
+      z.cells.forEach((q) => { const [x0, y0] = W2C(q[0], q[1] + c); ctx.fillRect(x0, y0, c * T.s, c * T.s); });
+      if (z.cells.length) { const mx = z.cells.reduce((s, q) => s + q[0], 0) / z.cells.length + c / 2, my = z.cells.reduce((s, q) => s + q[1], 0) / z.cells.length + c / 2;
+        text(mx, my, `${z.id} ×${fmt(z.mu, 1)}${z.status === 'изменилась' ? ' ⚠' : z.status === 'проверяется' ? ' ?' : ''}`, rgba('--m-know', 1), 11.5, 0, 700); }
+    });
+    (sci.hazards || []).forEach((h) => { circle(h[0], h[1], 0.55, rgba('--m-hazard', .12), rgba('--m-hazard', .9), 1.5); text(h[0], h[1], 'опасно', rgba('--m-hazard', 1), 11); });
+    if (sci.estimate) { circle(sci.estimate[0], sci.estimate[1], 0.3, null, rgba('--m-know', .9), 2); text(sci.estimate[0], sci.estimate[1], '?', rgba('--m-know', 1), 13, 0, 800); }
+  }
   if (v.base) { circle(v.base[0], v.base[1], v.base_radius || 0.3, rgba('--m-base', .14), rgba('--m-base', .8), 1.2); text(v.base[0], v.base[1] - 0.44, 'база', rgba('--m-base', 1), 11); }
   if ($('lTrail').checked && v.trajectory) line(v.trajectory.map((p) => [p[1], p[2]]), rgba('--m-trail', .85), 1.6);
   if (a.nav && a.nav.path && a.nav.path.length) line(a.nav.path, css('--m-path'), 2.5);
@@ -634,7 +663,7 @@ function render() {
   $('sensorText').textContent = sv == null ? '0 — далеко, 1 — рядом. Сбор удаётся ближе 0,3 м.' : sv >= SENSOR_THR ? 'Образец рядом — можно собирать.' : sv >= 0.3 ? 'Тепло: образец примерно в 0,3–0,8 м.' : 'Холодно: образец далеко.';
   if (a.auto_collect !== undefined && document.activeElement !== $('fAuto')) $('fAuto').checked = !!a.auto_collect;
   ['collectBtn', 'homeBtn', 'cancelBtn'].forEach((id) => { $(id).disabled = !S.live; });
-  drawChart(); renderLLM(); renderFeed(); draw();
+  drawChart(); renderLLM(); renderFeed(); renderLab(); draw();
   if (st !== lastState && st && st !== 'running') loadRuns();
   lastState = st || '';
 }
@@ -657,8 +686,18 @@ function renderLLM() {
   $('llmHistory').style.display = hist.length ? '' : 'none';
   $('llmHistory').innerHTML = '<div class="hint" style="margin-bottom:4px">Предыдущие решения</div>' + hist.map((h) => `<div class="h"><span class="num">t = ${fmt(h.t, 0)} с</span> · ${esc(h.trigger)}${h.fallback ? ' · <span style="color:var(--warn)">резерв</span>' : ''}<br><span class="hint">${esc((h.plan || []).filter((s) => s.startsWith('goto')).map((s) => s.split(' ')[1]).concat('база').join(' → '))}</span></div>`).join('');
 }
+const HSTAT = { 'проверяется': '', 'подтверждена': 'ok', 'опровергнута': 'bad', 'изменилась': 'warn' };
+function renderLab() {
+  const lab = S.lab || [], sci = S.science;
+  $('labCount').textContent = lab.length;
+  if (!sci && !lab.length) return;
+  const hyps = (sci && sci.hypotheses) || [];
+  $('labHyp').innerHTML = (sci ? `<div class="hint" style="margin-bottom:8px">Расход на обычном полу k = ${fmt(sci.k, 2)} ед./м · шум датчика σ = ${fmt(sci.noise, 3)} · режим: ${esc({ explore: 'разведка', localize: 'поиск образца', home: 'возврат' }[sci.mode] || sci.mode)}</div>` : '') +
+    (hyps.length ? '<table class="hyp">' + hyps.slice().reverse().map((h) => `<tr><td>${esc(h.id)}</td><td>${esc(h.statement)}</td><td><span class="badge ${HSTAT[h.status] || ''}">${esc(h.status)}</span></td></tr>`).join('') + '</table>' : '');
+  $('labLog').innerHTML = lab.slice().reverse().slice(0, 120).map((e) => `<div class="item"><span class="k ${esc(e.kind)}">${esc(e.kind)}</span><span class="num hint">${fmt(e.t, 0)} с</span><div>${esc(e.text)}</div></div>`).join('');
+}
 const EV = { sample_collected: ['check', 'ok', 'Образец собран'], collision: ['x', 'bad', 'Столкновение'], false_collect: ['alert', 'warn', 'Ложный сбор'], hazard_hit: ['alert', 'bad', 'Опасная зона'] };
-const KIND = { goto: 'Поездка', collect: 'Сбор', return: 'Возврат', finish: 'Финиш', explore: 'Разведка' };
+const KIND = { goto: 'Поездка', collect: 'Сбор', return: 'Возврат', finish: 'Финиш', explore: 'Разведка', wait: 'Замер датчика' };
 function renderFeed() {
   const items = [];
   (S.events || []).forEach((e) => { const d = EV[e.type] || ['dot', 'info', e.type]; items.push({ t: e.t, ic: d[0], cls: d[1], title: d[2] + (e.sample ? ' ' + e.sample : '') + (e.zone ? ' ' + e.zone : ''), sub: e.penalty ? `штраф ${e.penalty}` : '' }); });
