@@ -216,7 +216,8 @@ class Sim:
         cmd = ['ros2', 'launch', 'did_agent', 'did.launch.py',
                f'scenario:={p["scenario"]}', f'planner:={p["planner"]}',
                f'battery:={p["battery"]}', f'seed:={p["seed"]}', f'llm_model:={p["model"]}',
-               f'rviz:={"true" if p["rviz"] else "false"}', f'gui:={"true" if p["gui"] else "false"}']
+               f'rviz:={"true" if p["rviz"] else "false"}', f'gui:={"true" if p["gui"] else "false"}',
+               f'llm:={"true" if p["advisor"] else "false"}']
         if p['mission'] and p['mission'] != DEFAULT_MISSION:
             cmd.append(f'mission:={p["mission"]}')
         self._add('[панель] ' + ' '.join(c if ' ' not in c else repr(c) for c in cmd))
@@ -308,7 +309,7 @@ def make_handler(bridge: Bridge, sim: Sim, root: str, static_dir: str, mapdata: 
             raise ValueError('неизвестная модель')
         mission = ' '.join(str(b.get('mission') or '').split())[:600]
         return {'scenario': scenario, 'planner': planner, 'battery': battery, 'seed': seed, 'model': model,
-                'mission': mission, 'rviz': bool(b.get('rviz')), 'gui': bool(b.get('gui'))}
+                'mission': mission, 'rviz': bool(b.get('rviz')), 'gui': bool(b.get('gui')), 'advisor': bool(b.get('advisor'))}
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'

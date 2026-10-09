@@ -4,6 +4,7 @@ import math
 import os
 
 import numpy as np
+import pytest
 
 from did_agent.core.costmap import CostMap
 from did_agent.core.judge import Judge, JudgeConfig
@@ -107,3 +108,62 @@ def test_low_battery_returns_home(world_map):
     sc = Scenario('t', 'custom', None, BASE, [Sample('s1', 1.6, 1.6), Sample('s2', 1.6, -1.6)], [])
     res, planner, _ = run(world_map, sc, battery=8.0)
     assert res.score['returned'] and res.score['battery'] > 0
+
+
+# ---- the LLM advisor (fake model: no network) --------------------------------------------
+
+class FakeReply:
+    def __init__(self, content):
+        self.content, self.reasoning, self.latency, self.completion_tokens, self.finish_reason = content, '', 0.1, 20, 'stop'
+
+
+class FakeLLM:
+    """Answers from a script; then always picks the first affordable sector (or HOME)."""
+    model = 'fake'
+
+    def __init__(self, script=()):
+        self.script = list(script)
+        self.prompts = []
+
+    def chat(self, messages):
+        user = messages[1]['content']
+        self.prompts.append(messages)
+        if self.script:
+            return FakeReply(self.script.pop(0))
+        rows = [ln for ln in user.splitlines() if ln.startswith('- R') and 'не хватит' not in ln]
+        choice = rows[0][2:4] if rows and 'осталось найти 0' not in user else 'HOME'
+        return FakeReply('{"thought": "ближайший сектор", "choice": "%s", "hypothesis": "в секторе есть образец"}' % choice)
+
+
+def run_with_advisor(world_map, sc, client):
+    from did_agent.core.llm_scientist import LLMScientist
+    cfg = JudgeConfig.load(CONFIG)
+    judge = Judge(sc, cfg, world_map, seed=3)
+    cm = CostMap(world_map, inflation_radius=0.2)
+    adv = LLMScientist(client, async_mode=False)
+    planner = ScientificPlanner(world_map, cm, sc.base, Navigator(cm).path_cost, advisor=adv)
+    return run_mission(world_map, judge, planner, cm=cm, max_time=600.0), planner, adv
+
+
+def test_advisor_steers_the_mission_and_stays_safe(world_map):
+    sc = Scenario('t', 'custom', None, BASE, [Sample('s1', 0.55, -0.55), Sample('s2', -0.55, 1.6), Sample('s3', 1.6, 0.55)], [])
+    client = FakeLLM(['не JSON вовсе', '{"thought": "туда", "choice": "R9"}'])     # two bad answers first
+    res, planner, adv = run_with_advisor(world_map, sc, client)
+    assert res.score['collected'] == 3 and res.score['returned']
+    first = adv.journal[0]
+    assert first['fallback'] and len(first['attempts']) == 2 and 'не из списка' in first['attempts'][1]['error']
+    assert any(not r['fallback'] for r in adv.journal[1:])
+    prompt = client.prompts[-1][1]['content']
+    assert 'ВАРИАНТЫ' in prompt and 'ГИПОТЕЗЫ' in prompt and 'HOME' in prompt
+    assert any(e['kind'] == 'LLM' for e in planner.lab.entries)
+
+
+def test_advisor_cannot_pick_an_unaffordable_sector(world_map):
+    from did_agent.core.llm_scientist import AdviceError, LLMScientist
+    opts = [{'id': 'R1', 'affordable': False}, {'id': 'HOME', 'affordable': True}]
+    adv = LLMScientist(None)
+    with pytest.raises(AdviceError):
+        adv.validate({'choice': 'R1'}, opts, 2)
+    with pytest.raises(AdviceError):
+        adv.validate({'choice': 'R2'}, opts + [{'id': 'R2', 'affordable': True}], 0)    # all found -> HOME only
+    assert adv.validate({'choice': 'home', 'thought': 'пора'}, opts, 2)[0] == 'HOME'

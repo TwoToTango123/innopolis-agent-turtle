@@ -88,6 +88,7 @@ def main(argv=None):
     ap.add_argument('scenario', help='easy | medium | hard | path.yaml')
     ap.add_argument('--planner', choices=['scripted', 'llm', 'science'], default='scripted')
     ap.add_argument('--no-terrain', action='store_true', help='science: do not learn terrain (H1 baseline)')
+    ap.add_argument('--llm', action='store_true', help='science: the LLM chooses the strategy at key moments')
     ap.add_argument('--seed', type=int, default=-1, help='>= 0: generate the scenario from this seed')
     ap.add_argument('--battery', type=float, default=0.0, help='> 0: starting battery instead of 60')
     ap.add_argument('--model', default='deepseek-v4.1-flash')
@@ -108,7 +109,12 @@ def main(argv=None):
                              sc.base, Navigator(cm).path_cost, async_mode=False)
     elif args.planner == 'science':
         from .science import ScientificPlanner
-        planner = ScientificPlanner(grid, cm, sc.base, Navigator(cm).path_cost, learn_terrain=not args.no_terrain)
+        advisor = None
+        if args.llm:
+            from .llm_client import LLMClient
+            from .llm_scientist import LLMScientist
+            advisor = LLMScientist(LLMClient(args.model, env_file=args.env), async_mode=False)   # sim time waits for the model
+        planner = ScientificPlanner(grid, cm, sc.base, Navigator(cm).path_cost, learn_terrain=not args.no_terrain, advisor=advisor)
     else:
         planner = ScriptedPlanner([(s.x, s.y) for s in sc.samples])
     res = run_mission(grid, judge, planner, cm=cm)

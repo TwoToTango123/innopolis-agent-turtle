@@ -269,6 +269,7 @@ blockquote { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--acc
           <label><input type="radio" name="planner" value="scripted"><div><b>Фиксированный порядок</b><small>базовая линия для сравнения</small></div></label>
         </div>
       </div>
+      <label class="toggle" id="advisorWrap" style="margin-bottom:12px">LLM-советник: выбирает сектор разведки и момент возврата <input type="checkbox" id="fAdvisor" checked></label>
       <div id="llmFields">
         <div class="notice" id="keyWarn" style="display:none"><svg class="i"><use href="#i-alert"/></svg><span>Нет ключа в <code>.env</code> — робот поедет по резервному плану.</span></div>
         <label class="field"><span>Модель</span><select class="input" id="fModel"></select></label>
@@ -426,8 +427,10 @@ document.querySelectorAll('#plannerRadio input').forEach((r) => r.addEventListen
   form.planner = r.value; document.querySelectorAll('#plannerRadio label').forEach((l) => l.classList.toggle('on', l.contains(r)));
   updateForm();
 }));
+$('fAdvisor').addEventListener('change', () => updateForm());
 function updateForm() {
-  const llm = form.planner === 'llm';
+  const sci = form.planner === 'science', llm = form.planner === 'llm' || (sci && $('fAdvisor').checked);
+  $('advisorWrap').style.display = sci ? '' : 'none';
   $('llmFields').style.display = llm ? '' : 'none';
   $('keyWarn').style.display = llm && CFG && !CFG.has_key ? '' : 'none';
 }
@@ -438,7 +441,8 @@ async function start() {
   try {
     $('startBtn').disabled = $('emptyStart').disabled = true;
     await api('/api/start', { scenario: form.scenario, planner: form.planner, model: $('fModel').value, mission: $('fMission').value,
-      battery: $('fBattery').value, seed: $('fSeed').value, rviz: $('fRviz').checked, gui: $('fGui').checked });
+      battery: $('fBattery').value, seed: $('fSeed').value, rviz: $('fRviz').checked, gui: $('fGui').checked,
+      advisor: form.planner === 'science' && $('fAdvisor').checked });
     toast('Запуск начат — робот появится через 10–15 с');
   } catch (e) { toast('Не удалось запустить: ' + e.message, 'bad'); }
   $('startBtn').disabled = $('emptyStart').disabled = false;
@@ -673,7 +677,7 @@ function routeHtml(plan) {
 }
 function renderLLM() {
   const recs = S.llm || [], a = S.agent || {};
-  if (a.thinking) $('llmStatus').innerHTML = '<span class="spinner"></span><span>Модель думает — робот ждёт на месте</span>';
+  if (a.thinking) $('llmStatus').innerHTML = '<span class="spinner"></span><span>' + (a.mode === 'science' ? 'Модель думает — робот продолжает разведку' : 'Модель думает — робот ждёт на месте') + '</span>';
   else if (recs.length) { const r = recs[recs.length - 1]; $('llmStatus').innerHTML = r.fallback ? '<span class="badge warn">Резервный план</span><span class="hint">модель не дала корректный ответ</span>' : '<span class="badge ok">План принят</span><span class="hint">' + esc(r.model || '') + '</span>'; }
   else $('llmStatus').innerHTML = '<span class="hint">Решений пока нет. Запустите миссию в режиме LLM.</span>';
   if (!recs.length) { $('llmLast').innerHTML = ''; $('llmHistory').style.display = 'none'; return; }

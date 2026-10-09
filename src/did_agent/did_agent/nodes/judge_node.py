@@ -187,7 +187,7 @@ def main():
         node.save_log()
         try:
             node.destroy_node()
-        except Exception:  # noqa: BLE001 - the context may already be shut down
+        except BaseException:  # noqa: BLE001 - the context may be down, or a second Ctrl+C arrives
             pass
         if rclpy.ok():
             rclpy.shutdown()

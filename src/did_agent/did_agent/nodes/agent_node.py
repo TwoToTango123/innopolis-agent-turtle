@@ -42,6 +42,15 @@ from did_agent.core.science import ScientificPlanner
 from did_agent.nodes import markers as mk
 
 
+def _jsonable(o):
+    """numpy scalars (costs come from numpy arrays) -> plain Python for json.dumps."""
+    return o.item() if hasattr(o, 'item') else str(o)
+
+
+def dumps(o) -> str:
+    return json.dumps(o, ensure_ascii=False, default=_jsonable)
+
+
 def _share(*p):
     return os.path.join(get_package_share_directory('did_agent'), *p)
 
@@ -152,8 +161,20 @@ class AgentNode(Node):
         if kind == 'science':
             # levels 3-4: no sample coordinates; search by /did/sample_sensor, terrain from /did/battery
             learn = p('learn_terrain', True).value
-            self.get_logger().info(f'scientific planner: sensor search, terrain learning {"on" if learn else "OFF (H1 baseline)"}')
-            return ScientificPlanner(grid, self.cm, self.base, self.nav.path_cost, learn_terrain=learn)
+            advisor = None
+            if p('llm_advisor', False).value:
+                # the LLM picks the strategy (sector to explore / go home) at key moments; the robot never waits for it
+                from did_agent.core.llm_scientist import LLMScientist
+                model = p('llm_model', 'deepseek-v4.1-flash').value
+                try:
+                    client = LLMClient(model, env_file=p('llm_env_file', os.path.join(os.getcwd(), '.env')).value)
+                except LLMError as e:
+                    self.get_logger().error(f'LLM unavailable ({e}); the algorithm decides alone')
+                    client = None
+                advisor = LLMScientist(client, mission=p('mission', '').value)
+            self.get_logger().info(f'scientific planner: sensor search, terrain learning {"on" if learn else "OFF (H1 baseline)"}'
+                                   f', LLM advisor {"on" if advisor else "off"}')
+            return ScientificPlanner(grid, self.cm, self.base, self.nav.path_cost, learn_terrain=learn, advisor=advisor)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
             return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value,
@@ -227,7 +248,7 @@ class AgentNode(Node):
         if hasattr(planner, 'view') and st['t'] - self._science_t >= 1.0:      # heavier layers: once a second
             self._science_t = st['t']
             st['science'] = planner.view()
-        self.pub_state.publish(String(data=json.dumps(st, ensure_ascii=False)))
+        self.pub_state.publish(String(data=dumps(st)))
 
     def _scan_world(self):
         """Lidar hits in the world frame (every 4th ray) for the web map."""
@@ -415,19 +436,19 @@ class AgentNode(Node):
         while self._journal_len < len(j):
             entry = j[self._journal_len]
             self._journal_len += 1
-            self.pub_journal.publish(String(data=json.dumps(entry)))
+            self.pub_journal.publish(String(data=dumps(entry)))
             self.get_logger().info(f'subgoal: {entry}')
         lab = getattr(self.mission.planner, 'lab', None)
         while lab is not None and self._lab_len < len(lab.entries):
             e = lab.entries[self._lab_len]
             self._lab_len += 1
-            self.pub_lab.publish(String(data=json.dumps(e, ensure_ascii=False)))
+            self.pub_lab.publish(String(data=dumps(e)))
             self.get_logger().info(f'[журнал {e["t"]:.0f} с · {e["kind"]}] {e["text"]}')
         llm_journal = getattr(self.mission.planner, 'journal', None)
         while llm_journal is not None and self._llm_len < len(llm_journal):
             rec = llm_journal[self._llm_len]
             self._llm_len += 1
-            self.pub_llm.publish(String(data=json.dumps(rec, ensure_ascii=False)))
+            self.pub_llm.publish(String(data=dumps(rec)))
             tries = len(rec.get('attempts', []))
             lat = sum(a.get('latency', 0) for a in rec.get('attempts', []))
             self.get_logger().info(
@@ -453,7 +474,7 @@ class AgentNode(Node):
                                                         'hypotheses': [h.__dict__ for h in lab.hypotheses.values()]},
                        'llm_journal': getattr(self.mission.planner, 'journal', []),
                        'drain_per_meter': self.mission.drain_per_meter, 'score': self.score},
-                      f, indent=1, ensure_ascii=False)
+                      f, indent=1, ensure_ascii=False, default=_jsonable)
         self.get_logger().info(f'agent journal saved to {path}')
 
     def stop_robot(self):
@@ -476,7 +497,7 @@ def main():
             node.stop_robot()
         try:
             node.destroy_node()
-        except Exception:  # noqa: BLE001 - the context may already be shut down
+        except BaseException:  # noqa: BLE001 - the context may be down, or a second Ctrl+C arrives
             pass
         if rclpy.ok():
             rclpy.shutdown()

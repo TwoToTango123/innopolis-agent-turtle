@@ -363,14 +363,23 @@ class ScientificPlanner:
     """Explore -> localise by the sensor -> collect; learn the terrain; return in time."""
 
     def __init__(self, grid: GridMap, cm: CostMap, base: tuple[float, float], path_cost,
-                 sigma: float = SIGMA, reserve: float = 1.3, margin: float = 2.0, learn_terrain: bool = True):
+                 sigma: float = SIGMA, reserve: float = 1.3, margin: float = 2.0, learn_terrain: bool = True,
+                 advisor=None):
         self.cm = cm
+        self.advisor = advisor                    # LLMScientist: chooses the strategy at key moments (optional)
+        self.focus: int | None = None             # arena sector the advisor asked to explore
+        self._consult_q: list[str] = []
+        self._consult_t = -1e9
+        self._battery0 = None
+        self._battery_marks = [0.5, 0.3]
         self.base = base
         self.path_cost = path_cost
         self.sigma = sigma
         self.reserve, self.margin = reserve, margin
         self.learn_terrain = learn_terrain
         self.search = SampleSearch(grid, base, sigma)
+        from .llm_scientist import sector_of
+        self._sectors = sector_of(self.search.P)
         self.sensor = SensorTracker()
         self.terrain = TerrainLearner(cm)
         self.lab = LabJournal()
@@ -407,6 +416,58 @@ class ScientificPlanner:
     def journal_md(self) -> str:
         return self.lab.to_markdown()
 
+    @property
+    def journal(self) -> list[dict]:
+        """LLM decisions (published on /did_agent/llm like the level-2 planner's)."""
+        return self.advisor.journal if self.advisor is not None else []
+
+    @property
+    def thinking(self) -> bool:
+        return self.advisor is not None and self.advisor.thinking
+
+    # ---- the LLM advisor ------------------------------------------------------------------
+    def _consult(self, trigger: str) -> None:
+        if self.samples_total is not None and self.collected >= self.samples_total:
+            return                                 # nothing to decide: the algorithm goes home
+        if self.advisor is not None and self.mode != 'home':
+            self._consult_q.append(trigger)
+
+    def _advisor_tick(self, s: AgentState) -> None:
+        if self.advisor is None:
+            return
+        rec = self.advisor.poll()
+        if rec is not None:
+            self._apply_advice(rec, s)
+        if self._consult_q and self.mode != 'home' and not self.advisor.thinking and s.t - self._consult_t > 8.0:
+            trigger = '; '.join(dict.fromkeys(self._consult_q))
+            if self.advisor.ask(self, s, trigger):
+                self._consult_q, self._consult_t = [], s.t
+                rec = self.advisor.poll()              # synchronous mode (tests, offline)
+                if rec is not None:
+                    self._apply_advice(rec, s)
+
+    def _apply_advice(self, rec: dict, s: AgentState) -> None:
+        choice = rec.get('choice')
+        tag = 'резерв' if rec.get('fallback') else 'LLM'
+        self.lab.log(s.t, 'LLM', f'[{tag}] {choice}: {rec.get("thought", "")}', trigger=rec.get('trigger'))
+        if rec.get('hypothesis'):
+            self.lab.log(s.t, 'идея LLM', rec['hypothesis'])
+        if choice == 'HOME':
+            if self.mode != 'home':
+                self.mode = 'home'
+                self.lab.log(s.t, 'решение', 'Возвращаюсь на базу по решению LLM')
+                self._preempt(s.t, 'LLM: home', 0.0)
+        elif choice and choice.startswith('R'):
+            self.focus = int(choice[1:]) - 1
+            cur = self.current
+            if cur is not None and cur.kind == 'goto' and cur.params.get('explore') and \
+                    self._sectors[self._nearest_idx(*cur.target)] != self.focus:
+                self._preempt(s.t, f'LLM: explore sector {choice}', 0.0)
+
+    def _nearest_idx(self, x: float, y: float) -> int:
+        P = self.search.P
+        return int(np.argmin(np.hypot(P[:, 0] - x, P[:, 1] - y)))
+
     def pending_targets(self) -> list[tuple[float, float]]:
         return [s.target for s in self.queue if s.target is not None]
 
@@ -420,6 +481,11 @@ class ScientificPlanner:
 
     def observe(self, s: AgentState) -> None:
         self._t = s.t
+        if self._battery0 is None and s.battery is not None:
+            self._battery0 = s.battery
+        if self._battery_marks and s.battery is not None and self._battery0 and s.battery < self._battery_marks[0] * self._battery0:
+            self._consult(f'заряд ниже {int(100 * self._battery_marks.pop(0))} %')
+        self._advisor_tick(s)
         for e in s.events:
             self._on_event(e, s)
         if s.sensor_raw is not None and s.sensor_seq != self._seq:
@@ -510,12 +576,14 @@ class ScientificPlanner:
                 z.status = 'подтверждена'
                 z.reported_mu = mu
                 self.lab.resolve(s.t, z.hid, 'подтверждена', f'{nseg} замеров, расход ×{fmt(mu)}', 'зона в карте стоимостей, маршруты её объезжают')
+                self._consult(f'подтверждена дорогая зона {z.hid}')
                 changed = True
             elif z.status in ('подтверждена', 'изменилась') and abs(mu - z.reported_mu) / z.reported_mu > 0.3:
                 old = z.reported_mu
                 z.status, z.reported_mu = 'изменилась', mu
                 self.lab.resolve(s.t, z.hid, 'изменилась', f'расход ×{fmt(old)} → ×{fmt(mu)}: среда изменилась',
                                  'обновил карту стоимостей и перепланирую')
+                self._consult(f'среда изменилась: зона {z.hid}')
                 changed = True
             elif grew:
                 changed = True
@@ -546,6 +614,7 @@ class ScientificPlanner:
             self.cm.add_penalty_circle(cx, cy, 0.55)
             self.lab.resolve(s.t, h.id, 'подтверждена', 'штраф судьи −5', 'круг 0,55 м в карте рисков, A* его объезжает; перепланирую путь')
             self._preempt(s.t, 'hazard', 0.0)
+            self._consult(f'штраф: опасная зона {h.id}')
         elif typ == 'collision':
             self.lab.log(s.t, 'данные', f'Столкновение у ({fmt(s.x)}; {fmt(s.y)}) — штраф')
 
@@ -584,6 +653,8 @@ class ScientificPlanner:
         if s.score:
             self.samples_total = s.score.get('samples_total', self.samples_total)
             self.collected = s.score.get('collected', self.collected)
+        if self.advisor is not None and not self.advisor.journal and not self._consult_q and not self.advisor.thinking:
+            self._consult('начало миссии: куда вести разведку')
         if self.queue:
             return self.queue.pop(0)
         if self.mode == 'home':
@@ -623,16 +694,27 @@ class ScientificPlanner:
         return Subgoal('wait', params={'duration': dur, 'measure': True}, reason=f'усредняю датчик {fmt(dur, 0)} с')
 
     def _explore(self, s: AgentState) -> Subgoal:
+        if self.focus is not None:
+            sector = self._sectors == self.focus
+            if not (sector & ~self.search.excluded & ~self.search.abandoned).any():
+                self.lab.log(s.t, 'данные', f'Сектор R{self.focus + 1} исследован')
+                self.focus = None
+                self._consult('выбранный сектор исследован')
         for _ in range(5):
-            q = self.search.explore_target(s.x, s.y)
+            ok = (self._sectors == self.focus) if self.focus is not None else None
+            q = self.search.explore_target(s.x, s.y, ok=ok)
+            if q is None and ok is not None:
+                self.focus = None
+                q = self.search.explore_target(s.x, s.y)
             if q is None:
                 break
             if not self.cm.is_free_world(*q):
                 self.search.abandon_disc(*q, 0.2)
                 continue
             if self._affordable(s, q):
+                where = f'сектор R{self.focus + 1} (решение LLM), ' if self.focus is not None else ''
                 return Subgoal('goto', q, params={'explore': True},
-                               reason=f'разведка: не исследовано {fmt(100 * self.search.unexplored_fraction(), 0)} % арены')
+                               reason=f'разведка: {where}не исследовано {fmt(100 * self.search.unexplored_fraction(), 0)} % арены')
             self.search.abandon_disc(*q, 0.5)
         left = None if self.samples_total is None else self.samples_total - self.collected
         if self.search.unexplored_fraction() == 0.0 and left:
@@ -677,6 +759,7 @@ class ScientificPlanner:
                     self.lab.resolve(s.t, h.id, 'подтверждена', f'/did/collect: {r.message}')
                     self._sample_h = None
                 self.collected += 1
+                self._consult(f'собран образец ({self.collected} из {self.samples_total})')
                 self.search.on_collected(s.x, s.y)
                 self.sensor.buf = []          # readings before the collect saw the old sample
                 self.mode = 'explore'
