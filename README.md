@@ -1,10 +1,17 @@
 # Автономный исследователь на TurtleBot3 — DID Hack 2026
 
-Команда **IKA**. Агент управляет TurtleBot3 Burger в Gazebo (ROS 2 Jazzy, мир `turtlebot3_world`):
-строит маршрут по карте, едет к образцам, собирает их, следит за батареей и возвращается на базу.
+Команда **IKA**. Автономный научный агент управляет TurtleBot3 Burger в Gazebo (ROS 2 Jazzy, мир `turtlebot3_world`).
+Он **не знает, где образцы и дорогие участки пола**:
+- ищет образцы по датчику близости;
+- узнаёт «цену» пола по расходу батареи;
+- ведёт журнал гипотез и замечает изменения среды;
+- возвращается на базу вовремя.
+
+LLM (DeepSeek через ai.mai.ru) — научный руководитель: по журналу выбирает, где искать дальше и когда домой.
+Результаты экспериментов — в [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md), подготовка к финалу — в [docs/FINAL.md](docs/FINAL.md).
 Судья и генератор сценариев (образцы, «дорогие» грунты, опасные зоны, скрытые события) написаны нами по интерфейсу из [TASK.md](TASK.md).
 
-![RViz: полный прогон easy](docs/img/rviz_easy.png)
+![Пульт: научный агент, hard, 7 из 7](docs/img/control_panel_science.png)
 
 ## Быстрый старт
 
@@ -39,6 +46,10 @@ cd ~/innopolis_proj && ./scripts/control_panel.sh
 
 | Что показать | Команда |
 |---|---|
+| **Научный агент** (уровни 3–4): поиск по датчику, цена грунтов, журнал гипотез, адаптация | `ros2 launch did_agent did.launch.py scenario:=hard planner:=science` |
+| То же + **LLM-советник** (стратегия по журналу) | `ros2 launch did_agent did.launch.py scenario:=hard planner:=science llm:=true` |
+| Со **знаниями прошлой миссии** (база знаний) | `ros2 launch did_agent did.launch.py scenario:=hard planner:=science knowledge:=runs/knowledge.json` |
+| Базовая линия H1: без изучения грунтов | `ros2 launch did_agent did.launch.py scenario:=hard planner:=science learn_terrain:=false` |
 | **Полная миссия**: 3 образца → сбор → возврат → `/did/finish` | `ros2 launch did_agent did.launch.py scenario:=easy` |
 | Миссия посложнее (5 образцов, 3 зоны грунта) | `ros2 launch did_agent did.launch.py scenario:=medium` |
 | **LLM-планировщик** выбирает цели, порядок и момент возврата | `ros2 launch did_agent did.launch.py scenario:=medium planner:=llm` |
@@ -95,13 +106,18 @@ MAI_BASE_URL=https://api-ai.mai.ru/v1
 ## Тесты и офлайн-симулятор
 
 ```bash
-cd src/did_agent && python3 -m pytest -q          # 118 тестов, ~1 мин, ROS и сеть не нужны
-python3 -m did_agent.core.offline_sim easy        # вся миссия без Gazebo за секунды
+cd src/did_agent && python3 -m pytest -q          # 132 теста, ~1 мин, ROS и сеть не нужны
+python3 -m did_agent.core.offline_sim hard --planner science          # научная миссия без Gazebo за секунды + журнал
+python3 ../../scripts/science_batch.py --knowledge --seeds 30 --battery 25   # эксперимент H2 (см. docs/EXPERIMENTS.md)
 ```
 
 ## Документы
 
-- [docs/DEFENSE.md](docs/DEFENSE.md) — резюме проекта для защиты
+- [docs/FINAL.md](docs/FINAL.md) — **финал**: как работает научный агент, питч по слайдам, демо, ответы на вопросы
+- [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) — гипотезы H1–H3, методика, таблицы, статистика
+- [docs/DID_Hack_IKA_Финал.pptx](docs/DID_Hack_IKA_Финал.pptx) — финальная презентация
+- [.claude/skills](.claude/skills) — наши скиллы для coding-ассистента: прогон в Gazebo с доказательством, эксперимент, безопасный коммит
+- [docs/DEFENSE.md](docs/DEFENSE.md) — резюме проекта к промежуточной защите (уровни 0–2)
 - [docs/SPEECH.md](docs/SPEECH.md) — текст выступления по слайдам, ответы на требования, статус гипотез
 - [docs/DID_Hack_IKA_Защита_прототипа.pptx](docs/DID_Hack_IKA_Защита_прототипа.pptx) — презентация защиты
 - [DEVLOG.md](DEVLOG.md) — журнал разработки с ассистентом: что, почему, какие грабли
