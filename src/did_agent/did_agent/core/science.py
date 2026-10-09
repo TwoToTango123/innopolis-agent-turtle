@@ -117,7 +117,8 @@ class SensorTracker:
     def noise(self) -> float:
         if len(self.resid) < 15:
             return self.prior
-        return float(np.sqrt(np.mean(np.square(self.resid))))
+        # robust (MAD): a window that straddles a jump (a sample just collected) must not look like noise
+        return float(1.4826 * np.median(np.abs(self.resid)))
 
     def add(self, x: float, y: float, r: float, t: float) -> Obs | None:
         self.buf.append((x, y, r, t))
@@ -605,7 +606,7 @@ class ScientificPlanner:
         if self._sample_h is None:
             self._loc_attempts = 0
             self._sample_h = self.lab.propose(
-                s.t, 'S', 'sample', f'Образец около ({fmt(q[0], 2)}; {fmt(q[1], 2)}): датчик до {fmt(info["max"], 2)}, {info["readings"]} замеров',
+                s.t, 'S', 'sample', f'Образец около ({fmt(q[0], 2)}; {fmt(q[1], 2)}): датчик до {fmt(info["max"], 2)}, замеров: {info["readings"]}',
                 'подъехать, постоять, усреднить датчик; при ≥ 0,65 (ближе 0,3 м) — /did/collect', x=round(q[0], 2), y=round(q[1], 2))
         self._sample_h.data.update(x=round(q[0], 2), y=round(q[1], 2))
         if distance((s.x, s.y), q) > 0.15:
@@ -613,7 +614,7 @@ class ScientificPlanner:
                 self._abandon_sample(s, 'не хватит заряда доехать и вернуться')
                 return self._go_home(s, 'образец рядом, но заряда на него не хватает')
             return Subgoal('goto', q, params={'localize': True},
-                           reason=f'{self._sample_h.id}: к оценке положения образца ({info["readings"]} замеров, разброс {fmt(info["spread"], 2)} м)')
+                           reason=f'{self._sample_h.id}: к оценке положения образца (замеров: {info["readings"]}, разброс {fmt(info["spread"], 2)} м)')
         return self._measure()
 
     def _measure(self) -> Subgoal:

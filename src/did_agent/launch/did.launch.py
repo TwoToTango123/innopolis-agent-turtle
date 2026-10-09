@@ -25,7 +25,8 @@ def generate_launch_description():
         DeclareLaunchArgument('scenario', default_value='easy', description='easy | medium | hard | path/to/scenario.yaml'),
         DeclareLaunchArgument('seed', default_value='-1', description='>= 0: generate the scenario from this seed'),
         DeclareLaunchArgument('agent', default_value='true', description='Start the agent'),
-        DeclareLaunchArgument('planner', default_value='scripted', description='scripted: fixed mission order | llm: LLM chooses targets and order | manual: goals/route from RViz'),
+        DeclareLaunchArgument('planner', default_value='scripted', description='science: search by the sensor + terrain learning (levels 3-4) | scripted: fixed order | llm: LLM chooses targets and order | manual: goals/route from RViz'),
+        DeclareLaunchArgument('learn_terrain', default_value='true', description='science: learn terrain cost from the battery (false = H1 baseline)'),
         DeclareLaunchArgument('llm_model', default_value='deepseek-v4.1-flash', description='model on ai.mai.ru (key in .env)'),
         DeclareLaunchArgument('mission', default_value='', description='mission text for the LLM planner (empty: default)'),
         DeclareLaunchArgument('battery', default_value='0.0', description='> 0: starting battery instead of 60 (tight-budget demo)'),
@@ -51,6 +52,7 @@ def generate_launch_description():
              condition=IfCondition(arg('agent')),
              parameters=[{'use_sim_time': True,
                           'planner': arg('planner'),
+                          'learn_terrain': ParameterValue(arg('learn_terrain'), value_type=bool),
                           # level-1 demo: drive to the scenario's sample coordinates
                           'targets_from_scenario': arg('scenario'),
                           'llm_model': arg('llm_model'),

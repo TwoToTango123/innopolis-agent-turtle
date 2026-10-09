@@ -185,7 +185,10 @@ def main():
         pass
     finally:
         node.save_log()
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except Exception:  # noqa: BLE001 - the context may already be shut down
+            pass
         if rclpy.ok():
             rclpy.shutdown()
 

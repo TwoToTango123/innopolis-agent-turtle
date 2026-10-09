@@ -2,7 +2,8 @@
 
 Inputs:  /odom (pose, converted to the world frame), /scan (front clearance),
          /did/battery, /did/sample_sensor, /did/score, /did/events
-Outputs: /cmd_vel (TwistStamped), /did_agent/path (nav_msgs/Path), /did_agent/journal (JSON)
+Outputs: /cmd_vel (TwistStamped), /did_agent/path (nav_msgs/Path), /did_agent/journal (JSON),
+         /did_agent/lab (experiment journal entries, planner:=science)
 Calls:   /did/collect, /did/finish
 
 Planners are chosen with the `planner` parameter; levels 2-4 add entries to make_planner().
@@ -37,6 +38,7 @@ from did_agent.core.localization import DeadReckoning, map_to_odom
 from did_agent.core.mission import AgentState, GoalQueuePlanner, ScriptedPlanner, parse_targets
 from did_agent.core.navigator import Navigator
 from did_agent.core.scenario import resolve_scenario
+from did_agent.core.science import ScientificPlanner
 from did_agent.nodes import markers as mk
 
 
@@ -64,7 +66,11 @@ class AgentNode(Node):
         self.front = math.inf
         self.battery = None
         self.sensor = 0.0
+        self.sensor_raw = None
+        self.sensor_seq = 0
         self.score = {}
+        self._lab_len = 0
+        self._science_t = -1.0
         self.t_ready = None
         self.pending_call = None
         self._path_id = None
@@ -89,6 +95,7 @@ class AgentNode(Node):
         self.pub_path = self.create_publisher(Path, '/did_agent/path', 1)
         self.pub_journal = self.create_publisher(String, '/did_agent/journal', 10)
         self.pub_llm = self.create_publisher(String, '/did_agent/llm', 10)
+        self.pub_lab = self.create_publisher(String, '/did_agent/lab', 50)
         self._llm_len = 0
         self.cli = {'collect': self.create_client(Trigger, '/did/collect'),
                     'finish': self.create_client(Trigger, '/did/finish')}
@@ -142,6 +149,11 @@ class AgentNode(Node):
             self.get_logger().info(f'LLM planner: model {model}, {len(targets)} candidate targets from {sc.name}')
             return LLMPlanner(client, targets, self.base, self.nav.path_cost,
                               mission=p('mission', '').value or DEFAULT_MISSION)
+        if kind == 'science':
+            # levels 3-4: no sample coordinates; search by /did/sample_sensor, terrain from /did/battery
+            learn = p('learn_terrain', True).value
+            self.get_logger().info(f'scientific planner: sensor search, terrain learning {"on" if learn else "OFF (H1 baseline)"}')
+            return ScientificPlanner(grid, self.cm, self.base, self.nav.path_cost, learn_terrain=learn)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
             return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value,
@@ -212,6 +224,9 @@ class AgentNode(Node):
             'front': None if not math.isfinite(self.front) else round(self.front, 2),
             'scan': self._scan_world(),
         }
+        if hasattr(planner, 'view') and st['t'] - self._science_t >= 1.0:      # heavier layers: once a second
+            self._science_t = st['t']
+            st['science'] = planner.view()
         self.pub_state.publish(String(data=json.dumps(st, ensure_ascii=False)))
 
     def _scan_world(self):
@@ -257,6 +272,18 @@ class AgentNode(Node):
             ms.append(mk.text('route_label', i, x, y, str(i + 1), (1, 1, 1, 1), st, size=0.12))
         if len(route) > 1:
             ms.append(mk.line('route_line', 0, route, 0.015, (0.0, 0.8, 1.0, 0.5), st))
+        if isinstance(planner, ScientificPlanner):
+            v = planner.view()
+            if v['unexplored']:
+                ms.append(mk.cubes('science_unexplored', 0, v['unexplored'], 0.06, (1.0, 0.85, 0.2, 0.35), st, z=0.002))
+            for i, z in enumerate(v['zones']):
+                col = (0.5, 0.5, 0.5, 0.3) if z['status'] == 'опровергнута' else                       (0.85, 0.35, 0.1, 0.55) if z['status'] == 'изменилась' else (0.95, 0.55, 0.1, 0.45)
+                c = v['cell']
+                ms.append(mk.cubes('science_zone', i, [(x + c / 2, y + c / 2) for x, y in z['cells']], c, col, st, z=0.004))
+            for i, (x, y) in enumerate(v['hazards']):
+                ms.append(mk.disc('science_hazard', i, x, y, 0.55, (0.9, 0.1, 0.2, 0.35), st))
+            if v['estimate']:
+                ms.append(mk.sphere('science_estimate', 0, v['estimate'][0], v['estimate'][1], 0.14, (1.0, 0.2, 0.8, 0.9), st, z=0.07))
         if isinstance(planner, LLMPlanner):
             # RViz's marker font has no Cyrillic: show the plan in ASCII, the Russian thought goes to the log
             if planner.thinking:
@@ -292,6 +319,8 @@ class AgentNode(Node):
             self.tf_broadcaster.sendTransform(tf)
 
     def _on_sensor(self, msg):
+        self.sensor_raw = msg.data
+        self.sensor_seq += 1
         self._sensor_hist.append(msg.data)
         self.sensor = sum(self._sensor_hist) / len(self._sensor_hist)
 
@@ -314,7 +343,8 @@ class AgentNode(Node):
     # ---- loop -------------------------------------------------------------------
     def _state(self, t) -> AgentState:
         return AgentState(t, self.pose.x, self.pose.y, self.pose.yaw, self.battery, self.sensor,
-                          self.base, collected=self.score.get('collected', 0), score=self.score)
+                          self.base, collected=self.score.get('collected', 0), score=self.score,
+                          sensor_raw=self.sensor_raw, sensor_seq=self.sensor_seq)
 
     def _tick(self):
         t = self._now()
@@ -387,6 +417,12 @@ class AgentNode(Node):
             self._journal_len += 1
             self.pub_journal.publish(String(data=json.dumps(entry)))
             self.get_logger().info(f'subgoal: {entry}')
+        lab = getattr(self.mission.planner, 'lab', None)
+        while lab is not None and self._lab_len < len(lab.entries):
+            e = lab.entries[self._lab_len]
+            self._lab_len += 1
+            self.pub_lab.publish(String(data=json.dumps(e, ensure_ascii=False)))
+            self.get_logger().info(f'[журнал {e["t"]:.0f} с · {e["kind"]}] {e["text"]}')
         llm_journal = getattr(self.mission.planner, 'journal', None)
         while llm_journal is not None and self._llm_len < len(llm_journal):
             rec = llm_journal[self._llm_len]
@@ -405,9 +441,16 @@ class AgentNode(Node):
         if not self.log_dir:
             return
         os.makedirs(self.log_dir, exist_ok=True)
-        path = os.path.join(self.log_dir, time.strftime('%Y%m%d-%H%M%S') + '_agent.json')
+        stamp = time.strftime('%Y%m%d-%H%M%S')
+        path = os.path.join(self.log_dir, stamp + '_agent.json')
+        lab = getattr(self.mission.planner, 'lab', None)
+        if lab is not None:
+            with open(os.path.join(self.log_dir, stamp + '_lab.md'), 'w') as f:
+                f.write(lab.to_markdown(f'Журнал эксперимента — {self.score.get("scenario", "")}'))
         with open(path, 'w') as f:
             json.dump({'journal': self.mission.journal, 'planner_log': getattr(self.mission.planner, 'log', []),
+                       'lab': None if lab is None else {'entries': lab.entries,
+                                                        'hypotheses': [h.__dict__ for h in lab.hypotheses.values()]},
                        'llm_journal': getattr(self.mission.planner, 'journal', []),
                        'drain_per_meter': self.mission.drain_per_meter, 'score': self.score},
                       f, indent=1, ensure_ascii=False)
@@ -431,7 +474,10 @@ def main():
     finally:
         if rclpy.ok():
             node.stop_robot()
-        node.destroy_node()
+        try:
+            node.destroy_node()
+        except Exception:  # noqa: BLE001 - the context may already be shut down
+            pass
         if rclpy.ok():
             rclpy.shutdown()
 
