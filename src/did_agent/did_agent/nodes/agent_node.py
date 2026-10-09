@@ -172,9 +172,18 @@ class AgentNode(Node):
                     self.get_logger().error(f'LLM unavailable ({e}); the algorithm decides alone')
                     client = None
                 advisor = LLMScientist(client, mission=p('mission', '').value)
+            knowledge = None
+            kpath = p('knowledge', '').value
+            if kpath:
+                try:
+                    with open(os.path.expanduser(kpath)) as f:
+                        knowledge = json.load(f)
+                except (OSError, ValueError) as e:
+                    self.get_logger().warn(f'knowledge file {kpath} not loaded: {e}')
             self.get_logger().info(f'scientific planner: sensor search, terrain learning {"on" if learn else "OFF (H1 baseline)"}'
-                                   f', LLM advisor {"on" if advisor else "off"}')
-            return ScientificPlanner(grid, self.cm, self.base, self.nav.path_cost, learn_terrain=learn, advisor=advisor)
+                                   f', LLM advisor {"on" if advisor else "off"}, knowledge {"loaded" if knowledge else "none"}')
+            return ScientificPlanner(grid, self.cm, self.base, self.nav.path_cost, learn_terrain=learn, advisor=advisor,
+                                     knowledge=knowledge)
         if kind == 'manual':
             # operator mode: RViz "2D Goal Pose" = go there now, "Publish Point" = add to the route
             return GoalQueuePlanner(self.base, collect_at_goals=p('collect_at_goals', False).value,
@@ -468,6 +477,10 @@ class AgentNode(Node):
         if lab is not None:
             with open(os.path.join(self.log_dir, stamp + '_lab.md'), 'w') as f:
                 f.write(lab.to_markdown(f'Журнал эксперимента — {self.score.get("scenario", "")}'))
+            kn = dict(self.mission.planner.export_knowledge(), scenario=self.score.get('scenario'), saved=stamp)
+            for name in (stamp + '_knowledge.json', 'knowledge.json'):      # knowledge.json = the latest, for knowledge:=
+                with open(os.path.join(self.log_dir, name), 'w') as f:
+                    json.dump(kn, f, indent=1, ensure_ascii=False, default=_jsonable)
         with open(path, 'w') as f:
             json.dump({'journal': self.mission.journal, 'planner_log': getattr(self.mission.planner, 'log', []),
                        'lab': None if lab is None else {'entries': lab.entries,

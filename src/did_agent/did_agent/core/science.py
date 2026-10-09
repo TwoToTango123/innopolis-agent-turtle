@@ -326,6 +326,18 @@ class TerrainLearner:
         xs = [self.cell_center(c) for c in cells]
         return float(np.median(vals)), len(vals), (float(np.mean([p[0] for p in xs])), float(np.mean([p[1] for p in xs])))
 
+    def export(self) -> dict:
+        return {'k': self.k, 'rates': self.rates[-200:],
+                'cells': {f'{c[0]},{c[1]}': list(v) for c, v in self.cells.items()}}
+
+    def load(self, d: dict) -> None:
+        """Knowledge from earlier missions: raw drain per cell (re-checked by new measurements)."""
+        self.rates = list(d.get('rates', []))
+        self.k = d.get('k')
+        for key, vals in d.get('cells', {}).items():
+            i, j = (int(v) for v in key.split(','))
+            self.cells[(i, j)] = deque(vals, maxlen=6)
+
     def update_prior(self) -> float:
         """Unmeasured floor is priced by what we have seen so far: share of expensive cells x their excess."""
         stats = [self.cell_mu(c) for c in self.cells]
@@ -364,8 +376,9 @@ class ScientificPlanner:
 
     def __init__(self, grid: GridMap, cm: CostMap, base: tuple[float, float], path_cost,
                  sigma: float = SIGMA, reserve: float = 1.3, margin: float = 2.0, learn_terrain: bool = True,
-                 advisor=None):
+                 advisor=None, knowledge: dict | None = None):
         self.cm = cm
+        self.knowledge = knowledge                # what earlier missions learned (terrain, hazards)
         self.advisor = advisor                    # LLMScientist: chooses the strategy at key moments (optional)
         self.focus: int | None = None             # arena sector the advisor asked to explore
         self._consult_q: list[str] = []
@@ -406,6 +419,7 @@ class ScientificPlanner:
         self._last_obs = None
         self._t = 0.0
         self.lab.log(0.0, 'план', 'Цель: найти образцы по датчику, оценить «цену» пола по расходу батареи, вернуться на базу с резервом.')
+        self._knowledge_pending = bool(knowledge) and learn_terrain
 
     # ---- what the executor reads ----------------------------------------------------------
     @property
@@ -479,8 +493,30 @@ class ScientificPlanner:
         self.version += 1
         self.log.append(f't={t:.1f}: preempt: {why}')
 
+    def export_knowledge(self) -> dict:
+        """The reusable part of what this mission learned (the 'knowledge base' for the next one)."""
+        return {'terrain': self.terrain.export(), 'hazards': [list(h) for h in self._hazards],
+                'hypotheses': [{'id': h.id, 'kind': h.kind, 'statement': h.statement, 'status': h.status}
+                               for h in self.lab.hypotheses.values() if h.kind in ('terrain', 'hazard', 'baseline')]}
+
+    def _load_knowledge(self, s: AgentState) -> None:
+        self._knowledge_pending = False
+        kn = self.knowledge
+        self.terrain.load(kn.get('terrain', {}))
+        for x, y in kn.get('hazards', []):
+            self._hazards.append((x, y))
+            self.cm.add_penalty_circle(x, y, 0.55)
+        n_zones = sum(1 for h in kn.get('hypotheses', []) if h['kind'] == 'terrain' and h['status'] != 'опровергнута')
+        self.lab.log(s.t, 'знания', f'Загружены знания прошлых миссий: расход k = {fmt(self.terrain.k or 0, 2)}, '
+                                    f'{len(self.terrain.cells)} измеренных клеток, дорогих зон {n_zones}, опасных зон {len(self._hazards)}. '
+                                    'Считаю их гипотезами: новые замеры их подтвердят или опровергнут')
+        if self.terrain.k is not None:
+            self._terrain_update(s)
+
     def observe(self, s: AgentState) -> None:
         self._t = s.t
+        if self._knowledge_pending:
+            self._load_knowledge(s)
         if self._battery0 is None and s.battery is not None:
             self._battery0 = s.battery
         if self._battery_marks and s.battery is not None and self._battery0 and s.battery < self._battery_marks[0] * self._battery0:
@@ -641,6 +677,16 @@ class ScientificPlanner:
     def _go_home(self, s: AgentState, why: str) -> Subgoal:
         if self.mode != 'home':
             self.lab.log(s.t, 'решение', f'Возвращаюсь на базу: {why}')
+        if self.cm.penalty.max() > 1.0:
+            safe = self._home_cost(s)
+            if safe is not None and s.battery < safe * 1.1 + 0.5:
+                saved, self.cm.penalty = self.cm.penalty, np.ones_like(self.cm.penalty)
+                direct = self._home_cost(s)
+                if direct is not None and direct < safe * 0.9:
+                    self.lab.log(s.t, 'решение', f'Объезд опасной зоны стоит ≈{fmt(safe)}, заряда {fmt(s.battery)} — '
+                                                 f'иду напрямую (≈{fmt(direct)}): штраф −5 лучше, чем не вернуться')
+                else:
+                    self.cm.penalty = saved
         self.mode = 'home'
         self.queue = [Subgoal('finish', reason='на базе')]
         return Subgoal('return', reason=why)

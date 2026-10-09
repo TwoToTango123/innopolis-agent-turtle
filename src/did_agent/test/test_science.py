@@ -167,3 +167,22 @@ def test_advisor_cannot_pick_an_unaffordable_sector(world_map):
     with pytest.raises(AdviceError):
         adv.validate({'choice': 'R2'}, opts + [{'id': 'R2', 'affordable': True}], 0)    # all found -> HOME only
     assert adv.validate({'choice': 'home', 'thought': 'пора'}, opts, 2)[0] == 'HOME'
+
+
+def test_knowledge_base_carries_over_to_the_next_mission(world_map):
+    """H2: the second mission starts from what the first one learned (terrain + hazards) and avoids the hazard."""
+    hz = Zone('H1', 'circle', 1.0, cx=-0.55, cy=-0.55, r=0.3)
+    zone = Zone('A', 'circle', 3.0, cx=-0.55, cy=0.55, r=0.4)
+    sc = Scenario('t', 'custom', None, BASE, [Sample('s1', 0.55, -0.55), Sample('s2', -0.55, 1.6)], [zone], hazards=[hz])
+    _, first, _ = run(world_map, sc)
+    kn = first.export_knowledge()
+    assert kn['terrain']['k'] and kn['terrain']['cells']
+    cfg = JudgeConfig.load(CONFIG)
+    judge = Judge(sc, cfg, world_map, seed=4)
+    cm = CostMap(world_map, inflation_radius=0.2)
+    second = ScientificPlanner(world_map, cm, sc.base, Navigator(cm).path_cost, knowledge=kn)
+    res = run_mission(world_map, judge, second, cm=cm, max_time=600.0)
+    assert res.score['returned'] and res.score['collected'] == 2
+    assert any(e['kind'] == 'знания' for e in second.lab.entries)
+    if kn['hazards']:
+        assert res.score['penalties']['hazard_hit'] == 0
