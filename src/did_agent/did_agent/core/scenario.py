@@ -181,14 +181,15 @@ def generate(difficulty: str, seed: int, grid: GridMap, base=BASE) -> Scenario:
     if spec['events']:
         z = rng.choice(terrain)
         new_mult = round(rng.uniform(1.0, 1.5), 1) if z.multiplier >= 2.5 else round(rng.uniform(3.0, 4.0), 1)
-        events.append(Event(round(rng.uniform(50, 80), 1), 'terrain_change', {'zone': z.id, 'multiplier': new_mult}))
+        # timed to happen mid-mission: the agent clears hard in ~2 min offline (QUESTIONS.md#14)
+        events.append(Event(round(rng.uniform(20, 40), 1), 'terrain_change', {'zone': z.id, 'multiplier': new_mult}))
         r = 0.35
         p = _pick(rng, pts, lambda p: hazard_ok(p, r))
-        events.append(Event(round(rng.uniform(100, 140), 1), 'new_hazard',
+        events.append(Event(round(rng.uniform(35, 60), 1), 'new_hazard',
                             {'zone': Zone(f'H{len(hazards) + 1}', 'circle', 1.0,
                                           cx=round(p[0], 2), cy=round(p[1], 2), r=r).to_dict()}))
-        events.append(Event(round(rng.uniform(160, 200), 1), 'sensor_fault',
-                            {'noise_std': 0.2, 'duration': 60.0}))
+        events.append(Event(round(rng.uniform(45, 75), 1), 'sensor_fault',
+                            {'noise_std': 0.2, 'duration': 40.0}))
 
     return Scenario(f'{difficulty}_seed{seed}', difficulty, seed, tuple(base),
                     samples, terrain, hazards, events)

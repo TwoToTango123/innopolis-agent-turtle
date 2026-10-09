@@ -48,12 +48,13 @@ class CostMap:
             near = dilate(obstacle, soft_radius / res) & ~self.lethal
             self.base[near] = soft_cost
         self.terrain = np.ones(grid.occ.shape, dtype=np.float64)
+        self.penalty = np.ones(grid.occ.shape, dtype=np.float64)   # learned risk (hazards): avoided, not battery
 
     # ---- queries -------------------------------------------------------
     @property
     def cost(self) -> np.ndarray:
         """Effective multiplier per cell (inf for lethal cells)."""
-        c = self.base * self.terrain
+        c = self.base * self.terrain * self.penalty
         c[self.lethal] = np.inf
         return c
 
@@ -104,3 +105,13 @@ class CostMap:
 
     def reset_terrain(self) -> None:
         self.terrain[:] = 1.0
+
+    def add_lethal_circle(self, cx: float, cy: float, r: float) -> None:
+        """A learned no-go area."""
+        self.lethal |= self._region_mask('circle', (cx, cy, r))
+
+    def add_penalty_circle(self, cx: float, cy: float, r: float, multiplier: float = 50.0) -> None:
+        """A learned risky area (e.g. a hazard zone found by its penalty): A* goes around it when it
+        can, but it never cuts the robot off from the base like a lethal area could."""
+        m = self._region_mask('circle', (cx, cy, r))
+        self.penalty[m] = np.maximum(self.penalty[m], multiplier)

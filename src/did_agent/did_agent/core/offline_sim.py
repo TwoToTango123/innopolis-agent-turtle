@@ -49,9 +49,12 @@ def run_mission(grid: GridMap, judge: Judge, planner: Planner, cm: CostMap | Non
     t = 0.0
     events, traj = [], [(x, y)]
     judge.update(t, x, y, yaw)
+    seq = 0
     while t < max_time and ex.state != MissionExecutor.DONE:
-        s = AgentState(t, x, y, yaw, judge.battery.level, judge.sensor_reading(), judge.sc.base,
-                       collected=len(judge.collected), score=judge.score())
+        seq += 1
+        r = judge.sensor_reading()
+        s = AgentState(t, x, y, yaw, judge.battery.level, r, judge.sc.base,
+                       collected=len(judge.collected), score=judge.score(), sensor_raw=r, sensor_seq=seq)
         cmd = ex.step(s, raycast_front(grid, x, y, yaw))
         if cmd.call == 'collect':
             ok, msg, ev = judge.collect()
@@ -79,18 +82,20 @@ def main(argv=None):
     import os
 
     from .mission import ScriptedPlanner
-    from .scenario import Scenario
+
     here = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ap = argparse.ArgumentParser()
     ap.add_argument('scenario', help='easy | medium | hard | path.yaml')
-    ap.add_argument('--planner', choices=['scripted', 'llm'], default='scripted')
+    ap.add_argument('--planner', choices=['scripted', 'llm', 'science'], default='scripted')
+    ap.add_argument('--no-terrain', action='store_true', help='science: do not learn terrain (H1 baseline)')
+    ap.add_argument('--seed', type=int, default=-1, help='>= 0: generate the scenario from this seed')
     ap.add_argument('--battery', type=float, default=0.0, help='> 0: starting battery instead of 60')
     ap.add_argument('--model', default='deepseek-v4.1-flash')
     ap.add_argument('--env', default=os.path.expanduser('~/innopolis_proj/.env'), help='file with MAI_API_KEY')
     args = ap.parse_args(argv)
-    path = args.scenario if args.scenario.endswith('.yaml') else os.path.join(here, 'scenarios', args.scenario + '.yaml')
-    sc = Scenario.load(path)
+    from .scenario import resolve_scenario
     grid = GridMap.from_yaml(os.path.join(here, 'maps', 'map.yaml'))
+    sc = resolve_scenario(args.scenario, args.seed, grid, os.path.join(here, 'scenarios'))
     cfg = JudgeConfig.load(os.path.join(here, 'config', 'judge.yaml'))
     if args.battery > 0:
         cfg.battery.initial = args.battery
@@ -101,6 +106,9 @@ def main(argv=None):
         from .llm_planner import LLMPlanner, Target
         planner = LLMPlanner(LLMClient(args.model, env_file=args.env), [Target(s.id, s.x, s.y) for s in sc.samples],
                              sc.base, Navigator(cm).path_cost, async_mode=False)
+    elif args.planner == 'science':
+        from .science import ScientificPlanner
+        planner = ScientificPlanner(grid, cm, sc.base, Navigator(cm).path_cost, learn_terrain=not args.no_terrain)
     else:
         planner = ScriptedPlanner([(s.x, s.y) for s in sc.samples])
     res = run_mission(grid, judge, planner, cm=cm)
@@ -112,7 +120,10 @@ def main(argv=None):
     print()
     for j in res.journal:
         print({k: j[k] for k in ('t', 'kind', 'target', 'success', 'message', 'battery_used', 'battery')})
+    if hasattr(planner, 'lab'):
+        print(planner.lab.to_markdown())
     print('events:', res.events)
+    print('hidden env changes:', [e for e in judge.log if e.get('hidden')])
     print('score:', res.score, f'sim time {res.sim_time:.1f}s')
 
 

@@ -59,12 +59,12 @@ hazards:
   cy: -2.12
   r: 0.3
 events:
-- t: 56.5
+- t: 24.3
   type: terrain_change
   params:
     zone: C
     multiplier: 3.3
-- t: 104.1
+- t: 37.6
   type: new_hazard
   params:
     zone:
@@ -74,8 +74,8 @@ events:
       cx: 0.38
       cy: 0.38
       r: 0.35
-- t: 175.2
+- t: 56.4
   type: sensor_fault
   params:
     noise_std: 0.2
-    duration: 60.0
+    duration: 40.0

@@ -1,6 +1,6 @@
 """Mission executor: pulls subgoals from a Planner and runs them. No ROS dependencies.
 
-goto / explore / return -> Navigator; collect / finish -> a service call that the
+goto / explore / return -> Navigator; wait -> stand still; collect / finish -> a service call that the
 caller performs (ROS node: /did/collect, /did/finish; tests: Judge directly) and
 reports back with `service_result`.
 """
@@ -42,6 +42,7 @@ class MissionExecutor:
         self._pending_events: list[dict] = []
         self._planner_version = getattr(planner, 'version', None)
         self._last_s = None
+        self._wait_until = None
 
     # ---- bookkeeping --------------------------------------------------------
     def _track(self, s: AgentState) -> None:
@@ -55,9 +56,16 @@ class MissionExecutor:
         if self._total_dist > 1.0:
             self.drain_per_meter = self._total_used / self._total_dist
 
+    @property
+    def drain(self) -> float:
+        """Battery per metre for forecasts. A planner that maps the terrain into the cost map
+        knows the normal-floor drain; the plain average would count expensive zones twice."""
+        d = getattr(self.planner, 'base_drain', None)
+        return self.drain_per_meter if d is None else d
+
     def return_cost(self, x: float, y: float) -> float | None:
         c = self.nav.path_cost((x, y), self.base)
-        return None if c is None else c * self.drain_per_meter
+        return None if c is None else c * self.drain
 
     def trip_budget(self, x: float, y: float, target: tuple[float, float]) -> float | None:
         """Battery needed to reach `target` and then get home, with reserve."""
@@ -65,7 +73,7 @@ class MissionExecutor:
         home = self.nav.path_cost(target, self.base)
         if there is None or home is None:
             return None
-        return (there + home) * self.drain_per_meter * self.reserve + self.margin
+        return (there + home) * self.drain * self.reserve + self.margin
 
     def add_events(self, events: list[dict]) -> None:
         self._pending_events.extend(events)
@@ -86,6 +94,9 @@ class MissionExecutor:
     def step(self, s: AgentState, front: float = math.inf) -> Command:
         self._track(s)
         self._last_s = s
+        if self.state != self.DONE and hasattr(self.planner, 'observe'):
+            s.events, self._pending_events = self._pending_events, []    # observing planners react at once
+            self.planner.observe(s)
         if self.state == self.DONE:
             return Command()
         if self.state == self.WAITING:
@@ -102,12 +113,12 @@ class MissionExecutor:
         version = getattr(self.planner, 'version', None)
         if version != self._planner_version:
             self._planner_version = version
-            if self.current is not None and self.current.kind in ('goto', 'explore', 'return'):
+            if self.current is not None and self.current.kind in ('goto', 'explore', 'return', 'wait'):
                 self.nav.cancel()
                 self._finish_subgoal(s, False, 'preempted by a new goal')
         if self.current is None:
             s.events, self._pending_events = self._pending_events, []
-            s.drain_per_meter = self.drain_per_meter
+            s.drain_per_meter = self.drain
             s.return_cost = self.return_cost(s.x, s.y)
             self.current = self.planner.next_subgoal(s)
             if self.current is None:
@@ -116,6 +127,9 @@ class MissionExecutor:
                 return Command()     # persistent planner: idle until a new goal arrives
             self._sg_start = (s.t, s.battery, self._dist)
             sg = self.current
+            if sg.kind == 'wait':
+                self._wait_until = s.t + float(sg.params.get('duration', 1.0))
+                return Command()
             if sg.kind in ('goto', 'explore', 'return'):
                 target = self.base if sg.kind == 'return' else sg.target
                 if sg.kind != 'return':
@@ -129,6 +143,10 @@ class MissionExecutor:
             else:  # collect | finish
                 self.state = self.WAITING
                 return Command(call=sg.kind)
+        if self.current.kind == 'wait':
+            if s.t >= self._wait_until:
+                self._finish_subgoal(s, True, 'waited')
+            return Command()
         v, w = self.nav.step(Pose2D(s.x, s.y, s.yaw), s.t, front)
         if self.nav.status == Navigator.ARRIVED:
             self._finish_subgoal(s, True, 'arrived')
@@ -139,7 +157,7 @@ class MissionExecutor:
     # ---- operator control ---------------------------------------------------------
     def cancel_current(self, reason: str = 'cancelled by operator') -> None:
         """Stop the current trip (the planner decides what comes next)."""
-        if self.current is not None and self.current.kind in ('goto', 'explore', 'return') and self._last_s is not None:
+        if self.current is not None and self.current.kind in ('goto', 'explore', 'return', 'wait') and self._last_s is not None:
             self.nav.cancel()
             self._finish_subgoal(self._last_s, False, reason)
 

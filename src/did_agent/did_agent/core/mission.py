@@ -1,7 +1,8 @@
 """Mission layer: planners emit subgoals, the executor (agent node) runs them.
 No ROS dependencies.
 
-Subgoal kinds (TASK.md level 2): explore | goto | collect | return | finish.
+Subgoal kinds (TASK.md level 2): explore | goto | collect | return | finish,
+plus `wait` (stand still for params['duration'] s, e.g. to average the sample sensor).
 A planner only sees AgentState and SubgoalResult, so a scripted planner (level 1),
 an LLM planner (level 2) or a scientific planner (levels 3-4) are interchangeable:
 implement `Planner` and register it in PLANNERS.
@@ -10,7 +11,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Protocol
 
-KINDS = ('explore', 'goto', 'collect', 'return', 'finish')
+KINDS = ('explore', 'goto', 'collect', 'return', 'finish', 'wait')
 
 
 @dataclass
@@ -51,9 +52,16 @@ class AgentState:
     events: list[dict] = field(default_factory=list)      # judge events since the last call
     return_cost: float | None = None                      # planned battery to get home from here
     drain_per_meter: float = 1.0                          # measured by the executor
+    sensor_raw: float | None = None                       # latest unsmoothed /did/sample_sensor reading
+    sensor_seq: int = 0                                   # bumps on every new reading (dedupe at 20 Hz ticks)
 
 
 class Planner(Protocol):
+    """Optional extras the executor uses when present:
+    observe(state) - called every tick (continuous sensing, may bump `version` to preempt),
+    version        - preempt the current trip when it changes,
+    base_drain     - battery per metre on normal floor (None = use the executor's average)."""
+
     def next_subgoal(self, state: AgentState) -> Subgoal | None:
         """Next subgoal, or None when there is nothing left to do."""
 
